@@ -2426,13 +2426,12 @@ end R1Aux
 /-! ## Package R1: infinite order vanishing (Lemma R1) -/
 
 /-- **Lemma R1.** Flat Dirichlet data and flat conormal data force infinite order vanishing. -/
-theorem HalfBallSolution.integral_sq_le_pow (S : HalfBallSolution n) (g : ℝ → ℝ)
+theorem HalfBallSolution.integral_sq_le_pow (S : HalfBallSolution n) (hn : 0 < n) (g : ℝ → ℝ)
     (hneu : ∀ x ∈ flatPiece n S.R, x ≠ 0 → |⟪S.A x (S.Dv x), ed n⟫_ℝ| ≤ g ‖x‖)
     (hg : ∀ N : ℕ, ∃ Cg : ℝ, ∀ r ∈ Set.Ioo 0 S.R, g r ≤ Cg * r ^ N) :
     ∀ M : ℕ, ∃ Cm : ℝ, ∀ r ∈ Set.Ioc 0 (S.R / 2), ∫ x in halfBall n r, S.v x ^ 2 ≤ Cm * r ^ M := by
-  rcases Nat.eq_zero_or_pos n with hn | hn
-  · -- The statement is false for `n = 0`: see the module docstring.
-    sorry
-  · exact R1Aux.main_of_pos S g hneu hg hn
+  -- `0 < n` is necessary: for `n = 0` the flat piece is `{0}`, the Neumann hypothesis is vacuous,
+  -- and `v x = x 0` is a counterexample.
+  exact R1Aux.main_of_pos S g hneu hg hn
 
 end MazyaRefinedCauchy

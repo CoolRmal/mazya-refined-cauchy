@@ -186,7 +186,7 @@ theorem mainA {n : ℕ} (hn : 0 < n)
   have hgS_reg : RegularProfile (fun r => κ * g (κ * r)) :=
     RegularProfile.scale g κ hκ hg_pos hg_mono hg_reg
   -- Step 4: interior decay.
-  obtain ⟨Cd, r₁, hCd, hr₁, hdec⟩ := S.interior_decay _ hneuS hgS_pos hgS_mono hgS_reg
+  obtain ⟨Cd, r₁, hCd, hr₁, hdec⟩ := S.interior_decay hn _ hneuS hgS_pos hgS_mono hgS_reg
   -- Step 5: decay faster than every `e^{-N/r}` on a smaller half-ball.
   have hR'pos : 0 < min (S.R / 2) (min r₁ 1) := lt_min (half_pos S.R_pos) (lt_min hr₁ one_pos)
   have hR'le : min (S.R / 2) (min r₁ 1) ≤ S.R := (min_le_left _ _).trans (half_le_self S.R_pos.le)

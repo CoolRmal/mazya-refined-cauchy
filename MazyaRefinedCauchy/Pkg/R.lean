@@ -33,8 +33,8 @@ Write `ρ = ‖x‖`, `d = n + 1`, `m = (d - 2) / 2`. The half-cylinder `(ds² +
 * `step1` — the inequality (eq:Rmain) of the note, in `x` coordinates.
 * `HalfBallSolution.interior_decay` — assembled from `step1`, `step2` and `caccioppoli`.
 
-**The frozen statement is false for `n = 0`** (see the comment in the proof of
-`HalfBallSolution.interior_decay`); the proof below covers `0 < n`.
+The contract assumes `0 < n`: for `n = 0` it is false (see the comment in the proof of
+`HalfBallSolution.interior_decay`).
 
 ## Status (end of round 1)
 
@@ -1045,14 +1045,14 @@ theorem caccioppoli (S : HalfBallSolution n) (g : ℝ → ℝ)
   linarith
 
 /-- Infinite order vanishing of `v` and `∇v` in `L²`, from Lemma R1 and Caccioppoli. -/
-theorem grad_infinite_order (S : HalfBallSolution n) (g : ℝ → ℝ)
+theorem grad_infinite_order (S : HalfBallSolution n) (hn : 0 < n) (g : ℝ → ℝ)
     (hneu : ∀ x ∈ flatPiece n S.R, x ≠ 0 → |⟪S.A x (S.Dv x), ed n⟫_ℝ| ≤ g ‖x‖)
     (hg_pos : ∀ r, 0 < r → 0 < g r) (hg_mono : MonotoneOn g (Set.Ioi 0))
     (hg_flat : ∀ N : ℕ, ∃ Cg : ℝ, ∀ r ∈ Set.Ioo 0 S.R, g r ≤ Cg * r ^ N) :
     ∀ M : ℕ, ∃ Cm rm : ℝ, 0 < rm ∧ ∀ r ∈ Set.Ioc 0 rm,
       ∫ x in halfBall n r, (S.v x ^ 2 + ‖S.Dv x‖ ^ 2) ≤ Cm * r ^ M := by
   intro M
-  obtain ⟨Cm, hCm⟩ := S.integral_sq_le_pow g hneu hg_flat (M + 2)
+  obtain ⟨Cm, hCm⟩ := S.integral_sq_le_pow hn g hneu hg_flat (M + 2)
   obtain ⟨Cc, rc, hCc, hrc, hcacc⟩ := caccioppoli S g hneu hg_pos hg_mono
   obtain ⟨Cg, hCg⟩ := hg_flat (M + 2)
   have hRpos := S.R_pos
@@ -2353,7 +2353,7 @@ theorem step1 (S : HalfBallSolution n) (hn : 0 < n) (g : ℝ → ℝ)
   set M : ℕ := ⌈2 * τ⌉₊ + 3 with hM
   have hMτ : 2 * τ + 3 ≤ (M : ℝ) := by
     rw [hM]; push_cast; linarith [Nat.le_ceil (2 * τ)]
-  obtain ⟨CM, rm, hrm, hCM⟩ := grad_infinite_order S g hneu hg_pos hg_mono hg_flat M
+  obtain ⟨CM, rm, hrm, hCM⟩ := grad_infinite_order S hn g hneu hg_pos hg_mono hg_flat M
   set E₀ : ℝ := Real.exp (2 * τ * Real.log 2 + τ) with hE₀
   set Cerr : ℝ := Kin * |CM| * E₀ + L * r₂⁻¹ * |CM| with hCerr
   have hCerr0 : 0 ≤ Cerr := by positivity
@@ -2571,18 +2571,14 @@ end RPkg
 
 /-- **Proposition R.** Small conormal data, bounded by a regular nondecreasing profile `g`,
 force interior decay at rate `√g`. -/
-theorem HalfBallSolution.interior_decay (S : HalfBallSolution n) (g : ℝ → ℝ)
+theorem HalfBallSolution.interior_decay (S : HalfBallSolution n) (hn : 0 < n) (g : ℝ → ℝ)
     (hneu : ∀ x ∈ flatPiece n S.R, x ≠ 0 → |⟪S.A x (S.Dv x), ed n⟫_ℝ| ≤ g ‖x‖)
     (hg_pos : ∀ r, 0 < r → 0 < g r) (hg_mono : MonotoneOn g (Set.Ioi 0))
     (hg : RegularProfile g) :
     ∃ Cd r₀ : ℝ, 0 < Cd ∧ 0 < r₀ ∧ ∀ r ∈ Set.Ioc 0 r₀,
       ∫ x in halfBall n r, (S.v x ^ 2 + r ^ 2 * ‖S.Dv x‖ ^ 2) ≤ Cd * Real.sqrt (g (Cd * r)) := by
-  rcases Nat.eq_zero_or_pos n with hn0 | hn
-  · -- The statement is FALSE for `n = 0`: then `flatPiece 0 R = {0}`, so `hneu` is vacuous.
-    -- Counterexample: `A = id`, `B = 0`, `C = 0`, `R = 1`, `v x = x 0`, `Dv = e_d`,
-    -- `g r = exp (-1 / r²)` (a regular profile with `Λ(σ) = e^{2σ}`). The left side equals
-    -- `∫₀^r (t² + r²) dt = 4 r³ / 3`, while `Cd √(g (Cd r)) = Cd exp (-1 / (2 Cd² r²)) = o(r³)`.
-    sorry
+  -- `0 < n` is necessary: for `n = 0` the flat piece is `{0}`, the Neumann hypothesis is vacuous,
+  -- and `v x = x 0`, `g r = exp (-1 / r²)` is a counterexample (the left side is `4 r³ / 3`).
   obtain ⟨r₀', hr₀', hl2⟩ := RPkg.l2_decay S hn g hneu hg_pos hg_mono hg
   obtain ⟨Cc, rc, hCc, hrc, hcacc⟩ := RPkg.caccioppoli S g hneu hg_pos hg_mono
   obtain ⟨Cg1, hCg1⟩ := RPkg.flat_of_regular g hg_pos hg_mono hg S.R S.R_pos 1

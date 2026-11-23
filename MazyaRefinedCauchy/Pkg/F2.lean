@@ -371,18 +371,15 @@ end F2
 theorem carleman_conj (μ : Space n → ℝ) (B : Space n → Space n →L[ℝ] Space n)
     (φ : Space n → ℝ) (τ : ℝ) (w : Space n → ℝ) (x : Space n)
     (hμ : ContDiffAt ℝ 1 μ x) (hμ0 : μ x ≠ 0) (hB : ContDiffAt ℝ 1 B x)
+    (hsymm : ∀ ξ η, ⟪B x ξ, η⟫_ℝ = ⟪ξ, B x η⟫_ℝ)
     (hφ : ContDiffAt ℝ 2 φ x) (hw : ContDiffAt ℝ 2 w x) :
     Real.exp (τ * φ x)
         * divMu μ (fun y => B y (gradient (fun z => Real.exp (-τ * φ z) * w z) y)) x
-      = carlS μ B φ τ w x + carlT μ B φ τ w x := by
-  -- This statement is FALSE as stated: it lacks the symmetry hypothesis on `B` (the note assumes
-  -- `A` symmetric throughout). `F2.carlemanConjStatement_iff` proves that it holds iff `n = 0`
-  -- (`F2.not_carleman_conj_of_pos`: counterexample in every dimension `≥ 2`;
-  -- `F2.carleman_conj_zero`: true in dimension one). `F2.carleman_conj_general` gives the exact
-  -- defect `τ (⟪B∇φ, ∇w⟫ - ⟪∇φ, B∇w⟫)`. With the extra hypothesis
-  -- `(hsymm : ∀ ξ η, ⟪B x ξ, η⟫_ℝ = ⟪ξ, B x η⟫_ℝ)` the proof is
-  -- `F2.carleman_conj_of_symm μ B φ τ w x hμ hμ0 hB hsymm hφ hw`.
-  sorry
+      = carlS μ B φ τ w x + carlT μ B φ τ w x :=
+  -- The symmetry hypothesis is necessary: without it the identity fails in every dimension
+  -- `≥ 2` (`F2.not_carleman_conj_of_pos`), with defect `τ (⟪B∇φ, ∇w⟫ - ⟪∇φ, B∇w⟫)`
+  -- (`F2.carleman_conj_general`).
+  F2.carleman_conj_of_symm μ B φ τ w x hμ hμ0 hB hsymm hφ hw
 
 /-- Lemma 2.1(2), pointwise: `2 (S w)(T w) μ = J + div(flux)`. Requires `B` symmetric. -/
 theorem carleman_pointwise (μ : Space n → ℝ) (B : Space n → Space n →L[ℝ] Space n)

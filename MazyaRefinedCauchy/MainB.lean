@@ -786,7 +786,7 @@ theorem mainB {n : ℕ} (hn : 0 < n)
       hκpos.le
   have hg_reg : RegularProfile g := RegularProfile.scale H κ hκ hH_pos hH_mono hH_reg
   /- Step 3: interior decay and the `L²` bound for `u` near `0`. -/
-  obtain ⟨Cd, r₀, hCd, hr₀, hdecay⟩ := S.interior_decay g hneu hg_pos hg_mono hg_reg
+  obtain ⟨Cd, r₀, hCd, hr₀, hdecay⟩ := S.interior_decay hn g hneu hg_pos hg_mono hg_reg
   have hSRpos := S.R_pos
   set s₁ : ℝ := min r₀ (S.R / 2) / κ with hs₁_def
   have hs₁ : 0 < s₁ := by positivity

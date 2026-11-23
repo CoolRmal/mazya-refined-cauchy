@@ -1,0 +1,100 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mathlib-initiative/formalization.yaml/main/schema/formalization.schema.json
+# formalization.yaml v0.4.
+version: "v0.4"
+
+project:
+  name: "Maz'ya's refined Cauchy problem at a boundary point"
+  description: >-
+    Uniqueness for second order elliptic equations near a boundary point when the Dirichlet data
+    vanish to infinite order and only the Neumann (conormal) data are small. Theorem I(a): for
+    div(a grad u) + b . grad u + c u = 0 with smooth symmetric uniformly elliptic a and continuous
+    b, c, in a smooth domain of any dimension, a bound |a grad u . n| <= h(|x|) with
+    r log(1/h(r)) -> infinity forces u = 0 near the point. Theorem I(b): for harmonic u in a smooth
+    domain of any dimension, the same holds whenever the integral of log h near 0 diverges, for
+    regular h. Part (b) is the sufficiency half of the first question of Problem 5.3 in Maz'ya's
+    list of unsolved problems (2018). Work in progress: the proofs are not yet complete.
+  authors:
+    - "Yongxi (Aaron) Lin"
+  license: "Apache-2.0"
+  responsible_maintainers:
+    - "Yongxi (Aaron) Lin"
+
+classification:
+  arxiv: ["math.AP"]
+  msc2020: ["35B60", "35J15", "35R25"]
+
+sources:
+  - title: "Strong uniqueness in the Cauchy problem at a boundary point (unpublished note, Theorem I)"
+    type: original-proof
+    authors:
+      - "Yongxi (Aaron) Lin"
+    relationship: other
+    note: "The theorem and its informal proof were first written in this note (2026), with AI assistance."
+  - title: "Seventy five (thousand) unsolved problems in analysis and partial differential equations"
+    authors:
+      - "Vladimir Maz'ya"
+    type: article
+    location: "https://users.mai.liu.se/vlama82/pdf/Problems2018l_0312.pdf"
+    relationship: background
+    note: "Problem 5.3 poses the question addressed by Theorem I."
+  - title: "On the solutions of the Cauchy problem for the Laplace equation (uniqueness, normality, approximation)"
+    authors:
+      - "V. G. Maz'ya"
+      - "V. P. Havin"
+    type: article
+    location: "https://www.mathnet.ru/eng/mmo300"
+    relationship: background
+    note: "The half-space case of the sharp criterion."
+
+related_formalizations: []
+
+status:
+  scope: >-
+    Work in progress. The advertised statements are in Challenge.lean; their proofs are not yet
+    complete.
+  sorry_count: 2
+  sorry_in_definitions: 0
+  axioms: []
+
+automation:
+  methods:
+    - method: agent
+      models: ["claude-opus-5-5"]
+      framework: "Claude Code"
+      tool_setup: "Claude Code agents and workflows writing Lean, checked with lake build and lake comparator"
+      cost:
+        wall_time: "in progress"
+        spend_usd: "not tracked"
+        hardware: "local machine"
+      prompting_notes: "The informal proof of Theorem I was supplied to the agents as a blueprint."
+  spend_usd: "not tracked"
+  notes: "The statement was written and audited with AI agents and is reviewed by the maintainer."
+
+fidelity:
+  divergences: >-
+    The informal Theorem I allows C^{3,1} boundaries, C^{2,1} leading coefficients, bounded lower
+    order coefficients, weak solutions, and in part (b) constant coefficient operators. The formal
+    statements assume a smooth boundary graph and smooth a, continuous b and c, classical C^2
+    solutions with C^1 boundary values, and in part (b) the Laplacian.
+
+review:
+  status: "self-assessed, in progress"
+  reviewers:
+    - "none yet"
+  notes: "Statement audited by independent AI reviewers; human review pending."
+
+alignment:
+  namespace: "MazyaRefinedCauchy"
+  statements:
+    - source: "Theorem I(a)"
+      lean: "MazyaRefinedCauchy.refined_cauchy_superexp"
+      module: "Challenge"
+      status: "in progress"
+      note: "Smooth setting with classical solutions; see fidelity."
+    - source: "Theorem I(b)"
+      lean: "MazyaRefinedCauchy.refined_cauchy_laplace"
+      module: "Challenge"
+      status: "in progress"
+      note: "Laplacian; regularity of h as in the informal theorem; see fidelity."
+
+acknowledgements: "Mathlib; the Palomar template; Lean FRO's comparator."

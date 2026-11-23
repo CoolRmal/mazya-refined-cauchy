@@ -30,11 +30,11 @@ structure RegularProfile (h : ℝ → ℝ) : Prop where
   growth : ∃ C σ₀ : ℝ, ∀ σ ≥ σ₀, ∀ t ≥ 0,
     Real.log (1 / h (Real.exp (-(σ + t)))) ≤ Real.exp (C * t) * Real.log (1 / h (Real.exp (-σ)))
 
-/-- A profile with `r log(1/h(r)) → ∞` has a positive, nondecreasing, regular majorant with the
-same property. -/
+/-- A profile with `h(r) ≤ e^{-M/r}` eventually, for every `M`, has a positive, nondecreasing,
+regular majorant `g` with `r log(1/g(r)) → ∞`. -/
 theorem exists_regular_majorant (h : ℝ → ℝ)
-    (hh : Tendsto (fun r => r * Real.log (1 / h r)) (𝓝[>] 0) atTop) :
-    ∃ g : ℝ → ℝ, ∃ r₀ > 0, (∀ r ∈ Set.Ioo 0 r₀, |h r| ≤ g r) ∧ (∀ r, 0 < r → 0 < g r) ∧
+    (hh : ∀ M : ℝ, ∀ᶠ r in 𝓝[>] 0, h r ≤ Real.exp (-M / r)) :
+    ∃ g : ℝ → ℝ, ∃ r₀ > 0, (∀ r ∈ Set.Ioo 0 r₀, h r ≤ g r) ∧ (∀ r, 0 < r → 0 < g r) ∧
       MonotoneOn g (Set.Ioi 0) ∧ RegularProfile g ∧
       Tendsto (fun r => r * Real.log (1 / g r)) (𝓝[>] 0) atTop := by
   sorry

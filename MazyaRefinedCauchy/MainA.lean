@@ -2,16 +2,19 @@ module
 
 public import MazyaRefinedCauchy.Interfaces
 
-@[expose] public section
-
 /-!
 # Theorem I(a)
 
 Assembly of the proof from the package interfaces in `MazyaRefinedCauchy.Interfaces`.
 -/
 
+public section
+
 open scoped ContDiff RealInnerProductSpace
 open Filter Topology InnerProductSpace MeasureTheory
+
+set_option autoImplicit false
+set_option relaxedAutoImplicit false
 
 namespace MazyaRefinedCauchy
 
@@ -19,8 +22,9 @@ namespace MazyaRefinedCauchy
 symmetric and uniformly elliptic, and `b`, `c` are continuous. Let `u` be `C²` in the domain above
 the graph of a smooth `Γ`, with `u` and `∇u` (written `Du`) continuous up to the graph, and
 `L u = 0` in the domain. Suppose the Dirichlet data vanish to infinite order at `0`, and the
-conormal derivative `a ∇u · n` is bounded by `h(|x|)` on the graph, where `r log(1/h(r)) → ∞`
-as `r → 0⁺`. Then `u = 0` near `0`. -/
+conormal derivative `a ∇u · n` is bounded by `h(|x|)` on the graph, where `h(r) ≤ e^{-M/r}` for
+small `r`, for every `M` (for positive `h` this says `r log(1/h(r)) → ∞`). Then `u = 0` near
+`0`. -/
 theorem mainA {n : ℕ} (hn : 0 < n)
     (Γ : (Fin n → ℝ) → ℝ) (hΓ : ContDiff ℝ ∞ Γ) (hΓ0 : Γ 0 = 0) (ρ : ℝ) (hρ : 0 < ρ)
     (a : Space n → Space n →L[ℝ] Space n) (ha : ContDiff ℝ ∞ a)
@@ -37,7 +41,7 @@ theorem mainA {n : ℕ} (hn : 0 < n)
     (hDir : ∀ N : ℕ, ∃ C : ℝ, ∀ x ∈ boundaryPiece Γ ρ, |u x| ≤ C * ‖x‖ ^ N)
     (h : ℝ → ℝ)
     (hNeu : ∀ x ∈ boundaryPiece Γ ρ, |⟪a x (Du x), outerNormal Γ x⟫_ℝ| ≤ h ‖x‖)
-    (hh : Tendsto (fun r => r * Real.log (1 / h r)) (𝓝[>] 0) atTop) :
+    (hh : ∀ M : ℝ, ∀ᶠ r in 𝓝[>] 0, h r ≤ Real.exp (-M / r)) :
     ∃ ε > 0, ∀ x ∈ domain Γ ρ, ‖x‖ < ε → u x = 0 := by
   sorry
 

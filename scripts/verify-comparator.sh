@@ -50,6 +50,12 @@ if "external_kernels" in config:
     print(f"error: {source}: external_kernels is not a submitter field; Palomar rejects it", file=sys.stderr)
     raise SystemExit(1)
 config.pop("enable_nanoda", None)
+# Work-in-progress mode: while the development still has sorry, ALLOW_SORRY=1 permits sorryAx so
+# that CI still checks that Solution states exactly the Challenge theorems. Never commit sorryAx to
+# comparator.json: Palomar permits only the three standard axioms.
+import os
+if os.environ.get("ALLOW_SORRY") == "1":
+    config["permitted_axioms"] = config["permitted_axioms"] + ["sorryAx"]
 config["external_kernels"] = {
     "nanoda": [f"{prefix}/bin/nanoda_bin"],
     "con-ron": [f"{prefix}/bin/con-ron"],

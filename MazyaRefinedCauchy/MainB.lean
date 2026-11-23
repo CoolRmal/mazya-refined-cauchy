@@ -2,16 +2,19 @@ module
 
 public import MazyaRefinedCauchy.Interfaces
 
-@[expose] public section
-
 /-!
 # Theorem I(b)
 
 Assembly of the proof from the package interfaces in `MazyaRefinedCauchy.Interfaces`.
 -/
 
+public section
+
 open scoped ContDiff RealInnerProductSpace
 open Filter Topology InnerProductSpace MeasureTheory
+
+set_option autoImplicit false
+set_option relaxedAutoImplicit false
 
 namespace MazyaRefinedCauchy
 
@@ -20,7 +23,7 @@ and `∇u` (written `Du`) continuous up to the graph. Suppose the Dirichlet data
 order at `0` and the normal derivative is bounded by `h(|x|)` on the graph. Assume `h` is positive
 and nondecreasing on `(0, ρ)`, and that `Λ(σ) = log(1/h(e^{-σ}))` satisfies `Λ(σ)/σ → ∞`, is convex
 for large `σ`, and has at most exponential growth `Λ(σ + t) ≤ e^{C t} Λ(σ)` (that is, `Λ' ≤ C Λ`).
-If `∫₀ log h = -∞`, then `u = 0` near `0`. -/
+If `∫₀ log h = -∞` (stated on `(0, ρ/2)`), then `u = 0` near `0`. -/
 theorem mainB {n : ℕ} (hn : 0 < n)
     (Γ : (Fin n → ℝ) → ℝ) (hΓ : ContDiff ℝ ∞ Γ) (hΓ0 : Γ 0 = 0) (ρ : ℝ) (hρ : 0 < ρ)
     (u : Space n → ℝ) (Du : Space n → Space n)
@@ -34,10 +37,12 @@ theorem mainB {n : ℕ} (hn : 0 < n)
     (hh_pos : ∀ r ∈ Set.Ioo 0 ρ, 0 < h r)
     (hh_mono : MonotoneOn h (Set.Ioo 0 ρ))
     (hΛ_super : Tendsto (fun σ => Real.log (1 / h (Real.exp (-σ))) / σ) atTop atTop)
-    (hΛ_convex : ∃ σ₀ : ℝ, ConvexOn ℝ (Set.Ici σ₀) (fun σ => Real.log (1 / h (Real.exp (-σ)))))
+    (hΛ_convex : ∃ σ₀ : ℝ,
+      ConvexOn ℝ (Set.Ici σ₀) (fun σ => Real.log (1 / h (Real.exp (-σ)))))
     (hΛ_growth : ∃ C σ₀ : ℝ, ∀ σ ≥ σ₀, ∀ t ≥ 0,
-      Real.log (1 / h (Real.exp (-(σ + t)))) ≤ Real.exp (C * t) * Real.log (1 / h (Real.exp (-σ))))
-    (hlog : Tendsto (fun ε => ∫ r in ε..ρ, Real.log (h r)) (𝓝[>] 0) atBot) :
+      Real.log (1 / h (Real.exp (-(σ + t))))
+        ≤ Real.exp (C * t) * Real.log (1 / h (Real.exp (-σ))))
+    (hlog : Tendsto (fun ε => ∫ r in ε..(ρ / 2), Real.log (h r)) (𝓝[>] 0) atBot) :
     ∃ ε > 0, ∀ x ∈ domain Γ ρ, ‖x‖ < ε → u x = 0 := by
   sorry
 

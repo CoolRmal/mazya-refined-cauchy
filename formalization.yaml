@@ -9,10 +9,15 @@ project:
     vanish to infinite order and only the Neumann (conormal) data are small. Theorem I(a): for
     div(a grad u) + b . grad u + c u = 0 with smooth symmetric uniformly elliptic a and continuous
     b, c, in a smooth domain of any dimension, a bound |a grad u . n| <= h(|x|) with
-    r log(1/h(r)) -> infinity forces u = 0 near the point. Theorem I(b): for harmonic u in a smooth
+    h(r) <= exp(-M/r) for small r and every M (r log(1/h(r)) -> infinity) forces u = 0 near the
+    point. Theorem I(b): for harmonic u in a smooth
     domain of any dimension, the same holds whenever the integral of log h near 0 diverges, for
-    regular h. Part (b) is the sufficiency half of the first question of Problem 5.3 in Maz'ya's
-    list of unsolved problems (2018). Work in progress: the proofs are not yet complete.
+    regular h. For h in this regularity class, which has not been compared with the unspecified
+    regularity conditions of Maz'ya and Havin, part (b) is, in local form, the sufficiency half of
+    the first question of Problem 5.3 in Maz'ya's list of unsolved problems (2018): smooth domains
+    in place of the half-space, for the Laplacian. Part (a) does not settle the second question: it
+    needs r log(1/h(r)) -> infinity and bounds the conormal derivative. Work in progress: the
+    proofs are not yet complete.
   authors:
     - "Yongxi (Aaron) Lin"
   license: "Apache-2.0"
@@ -34,17 +39,19 @@ sources:
     authors:
       - "Vladimir Maz'ya"
     type: article
-    location: "https://users.mai.liu.se/vlama82/pdf/Problems2018l_0312.pdf"
+    id: "doi:10.1007/s00020-018-2460-8"
+    location: "Section 5.3 (p. 15 of https://users.mai.liu.se/vlama82/pdf/Problems2018l_0312.pdf)"
     relationship: background
-    note: "Problem 5.3 poses the question addressed by Theorem I."
+    note: "Integral Equations and Operator Theory 90 (2018), Paper No. 25. Problem 5.3 poses the question addressed by Theorem I."
   - title: "On the solutions of the Cauchy problem for the Laplace equation (uniqueness, normality, approximation)"
     authors:
       - "V. G. Maz'ya"
       - "V. P. Havin"
     type: article
-    location: "https://www.mathnet.ru/eng/mmo300"
+    id: "https://www.mathnet.ru/eng/mmo300"
+    location: "the half-space uniqueness criterion (integral of log h = -infinity)"
     relationship: background
-    note: "The half-space case of the sharp criterion."
+    note: "Trudy Moskov. Mat. Obshch. 30 (1974); English translation Trans. Moscow Math. Soc. 30 (1974), 65-117."
 
 related_formalizations: []
 
@@ -73,9 +80,22 @@ automation:
 fidelity:
   divergences: >-
     The informal Theorem I allows C^{3,1} boundaries, C^{2,1} leading coefficients, bounded lower
-    order coefficients, weak solutions, and in part (b) constant coefficient operators. The formal
-    statements assume a smooth boundary graph and smooth a, continuous b and c, classical C^2
-    solutions with C^1 boundary values, and in part (b) the Laplacian.
+    order coefficients, weak solutions in C^1 up to the boundary, and in part (b) constant
+    coefficient operators with the conormal derivative. The formal statements assume: (1) after a
+    rigid motion, the boundary point is the origin and the domain is the part of the ball B(0, rho)
+    above the graph of a C^infinity function Gamma on R^n with Gamma(0) = 0 (grad Gamma(0) is not
+    normalized); Gamma, a, b, c are defined on the whole space, which loses nothing after a cutoff;
+    (2) a is C^infinity, symmetric and uniformly elliptic (the upper bound is automatic locally),
+    and b, c are continuous; (3) u is a classical C^2 solution with u and grad u continuous up to
+    the graph, which loses nothing for smooth coefficients; (4) in part (b) the operator is the
+    Laplacian and the normal derivative is bounded; (5) the regularity conditions on h in part (b)
+    are restated for Lambda(sigma) = log(1/h(e^{-sigma})): superlinear, eventually convex, and
+    Lambda(sigma + t) <= e^{Ct} Lambda(sigma), the integrated form of s omega'(s) <= C omega(s);
+    h is positive and nondecreasing on (0, rho), and the divergence of the log-integral is stated
+    as the limit of the interval integral over (epsilon, rho/2); (6) in part (a) the decay of h is
+    stated as h(r) <= exp(-M/r) eventually for every M, which is equivalent to
+    r log(1/h(r)) -> infinity for positive h and also allows h with zeros; (7) the Neumann bound is
+    imposed on the whole boundary piece, including x = 0.
 
 review:
   status: "self-assessed, in progress"
@@ -95,6 +115,6 @@ alignment:
       lean: "MazyaRefinedCauchy.refined_cauchy_laplace"
       module: "Challenge"
       status: "in progress"
-      note: "Laplacian; regularity of h as in the informal theorem; see fidelity."
+      note: "Laplacian; the regularity conditions on h are restated in terms of Lambda (see fidelity item 5)."
 
 acknowledgements: "Mathlib; the Palomar template; Lean FRO's comparator."

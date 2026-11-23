@@ -6,8 +6,9 @@ V. Maz'ya, [*Seventy five (thousand) unsolved problems in analysis and partial d
 equations*](https://users.mai.liu.se/vlama82/pdf/Problems2018l_0312.pdf) (2018).
 
 **Status: work in progress.** The statements in [`Challenge.lean`](Challenge.lean) are final
-candidates; the proofs are being formalized. `Solution.lean` still contains `sorry`, so the
-Comparator check in CI is expected to fail until the development is complete.
+candidates; the proofs are being formalized (see [`BLUEPRINT.md`](BLUEPRINT.md)). Until the
+development is free of `sorry`, CI runs Comparator in a work-in-progress mode that also permits
+`sorryAx`: it still checks that `Solution.lean` states exactly the theorems of `Challenge.lean`.
 
 ## The statements
 
@@ -24,15 +25,19 @@ continuous up to the graph. The Dirichlet data vanish to infinite order at `0`:
   dimension: if `∫₀ log h(r) dr = -∞` and `h` is regular (positive, nondecreasing, and
   `Λ(σ) = log(1/h(e^{-σ}))` superlinear, eventually convex, with `Λ' ≤ CΛ`), then `u = 0` near `0`.
 
-Part (b) is the sufficiency half of the first question of Maz'ya's Problem 5.3 (smooth domains in
-place of a half-space) for regular `h`.
+For `h` in this regularity class, which has not been compared with the unspecified regularity
+conditions of Maz'ya and Havin, part (b) is, in local form, the sufficiency half of the first
+question of Maz'ya's Problem 5.3: smooth domains in place of the half-space, for the Laplacian.
+Part (a) bounds the conormal derivative and needs `r log(1/h(r)) → ∞`, so it does not answer
+Maz'ya's second question.
 
 ### Differences from the informal theorem
 
 The informal Theorem I allows `C^{3,1}` boundaries, `C^{2,1}` leading coefficients, bounded `b`, `c`,
 weak solutions, and in part (b) any constant-coefficient operator `a^{ij}∂_{ij}`. The formal
 statements assume smooth `Γ` and `a`, continuous `b` and `c`, classical (`C²`) solutions, and in
-part (b) the Laplacian. These match the smooth setting of Maz'ya's problem.
+part (b) the Laplacian. For smooth coefficients, which is Maz'ya's setting, weak solutions are
+classical, so nothing is lost there. The log-integral in (b) is stated on `(0, ρ/2)`.
 
 ## Building
 

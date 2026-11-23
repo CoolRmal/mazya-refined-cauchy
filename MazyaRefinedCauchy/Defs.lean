@@ -12,13 +12,16 @@ public import Mathlib.MeasureTheory.Integral.IntervalIntegral.Basic
 /-!
 # Definitions of the advertised statement
 
-These definitions must stay *identical* to the ones in `Challenge.lean`: the statements proved in
-`Solution.lean` refer to them, and Comparator checks that they match. `scripts/check-defs-sync.py`
-checks this in CI.
+These definitions must stay *identical* to the ones in `Challenge.lean` (including the import
+header and options): the statements proved in `Solution.lean` refer to them, and Comparator
+checks that they match. `scripts/check-defs-sync.py` checks this in CI.
 -/
 
 open scoped ContDiff RealInnerProductSpace
 open Filter Topology InnerProductSpace
+
+set_option autoImplicit false
+set_option relaxedAutoImplicit false
 
 namespace MazyaRefinedCauchy
 

@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""Check that the definitions in MazyaRefinedCauchy/Defs.lean are identical to Challenge.lean's.
+"""Check that MazyaRefinedCauchy/Defs.lean repeats Challenge.lean's header and definitions verbatim.
 
-Solution.lean states the advertised theorems using the definitions from Defs.lean, while
-Challenge.lean carries its own copy. Comparator requires the two to agree, so this check keeps them
-textually identical: the block from `open scoped ContDiff` up to the first theorem docstring.
+Comparator compares the elaborated definitions exactly (including auxiliary `_proof_` constants),
+and these depend on the imports and options, so both the import header and the block from
+`open scoped ContDiff` up to the first theorem docstring must agree.
 """
 import pathlib
 import sys
 
 root = pathlib.Path(__file__).resolve().parent.parent
-challenge = (root / "Challenge.lean").read_text(encoding="utf-8")
+ch = (root / "Challenge.lean").read_text(encoding="utf-8")
 defs = (root / "MazyaRefinedCauchy" / "Defs.lean").read_text(encoding="utf-8")
-
-start_marker = "open scoped ContDiff"
-end_marker = "/-- **Theorem I(a).**"
-block = challenge[challenge.index(start_marker):challenge.index(end_marker)]
-defs_block = defs[defs.index(start_marker):defs.rindex("end MazyaRefinedCauchy")]
-
-if block != defs_block:
-    print("error: MazyaRefinedCauchy/Defs.lean is out of sync with Challenge.lean", file=sys.stderr)
+marker = "@[expose] public section"
+ok = ch[: ch.index(marker)] == defs[: defs.index(marker)]
+start = "open scoped ContDiff"
+block = ch[ch.index(start): ch.index("/-- **Theorem I(a).**")]
+ok = ok and block == defs[defs.index(start): defs.rindex("end MazyaRefinedCauchy")]
+if not ok:
+    print("error: MazyaRefinedCauchy/Defs.lean is out of sync with Challenge.lean;"
+          " run scripts/regen-from-challenge.py", file=sys.stderr)
     sys.exit(1)
 print("Defs.lean matches Challenge.lean")

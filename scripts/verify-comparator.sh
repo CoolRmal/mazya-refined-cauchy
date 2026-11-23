@@ -60,6 +60,11 @@ config["external_kernels"] = {
     "nanoda": [f"{prefix}/bin/nanoda_bin"],
     "con-ron": [f"{prefix}/bin/con-ron"],
 }
+# con-ron declines (exit code 2) whenever it has to skip declarations that use a tolerated axiom
+# such as sorryAx, so in work-in-progress mode only Lean's kernel and NanoDa judge. Strict mode
+# (the default, and what Palomar runs) keeps all three kernels.
+if os.environ.get("ALLOW_SORRY") == "1":
+    del config["external_kernels"]["con-ron"]
 pathlib.Path(destination).write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 PY
 

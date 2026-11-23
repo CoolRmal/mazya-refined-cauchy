@@ -59,7 +59,7 @@ status:
   scope: >-
     Work in progress. The advertised statements are in Challenge.lean; their proofs are not yet
     complete.
-  sorry_count: 8
+  sorry_count: 5
   sorry_in_definitions: 0
   axioms: []
 

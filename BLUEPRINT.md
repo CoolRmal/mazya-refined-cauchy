@@ -42,10 +42,10 @@ and `MainB`. Every file is checked on its own, so packages can be proved in para
 | G | `Pkg/G.lean` | shrinking a `HalfBallSolution`; rescaling a regular profile; super-exponential decay | F5 | proved |
 | U | `Pkg/U.lean` | weak unique continuation (local Carleman estimate, touching-ball argument) | F1, F2 | proved |
 | C | `Pkg/C.lean` | collar reduction to a flat boundary with conormal `e_d` (Lemma coords) | F1 | proved |
-| R1 | `Pkg/R1.lean` | Lemma R1: flat Cauchy data imply `∫_{B_r⁺} v² = O(r^M)` for every `M` (blow-up) | F1, F3, F4, U, G | 2 sorry |
-| R | `Pkg/R.lean` | Proposition R with Lemmas cyl and R2 (radial Carleman estimate) | F1, F2, F5, R1, G | 3 sorry |
-| PL | `Pkg/PL.lean` | Proposition PL with Lemma inversion and Proposition carleman | F1, F2, G | 2 sorry |
-| L | `Pkg/L.lean` | tangent ball, Kelvin transform, Lemma DC (partial Fourier transform) | F1, F4, F6 | 1 sorry |
+| R1 | `Pkg/R1.lean` | Lemma R1: flat Cauchy data imply `∫_{B_r⁺} v² = O(r^M)` for every `M` (blow-up) | F1, F3, F4, U, G | proved |
+| R | `Pkg/R.lean` | Proposition R with Lemmas cyl and R2 (radial Carleman estimate) | F1, F2, F5, R1, G | in progress: Lemma R2 (`carleman`) |
+| PL | `Pkg/PL.lean` | Proposition PL with Lemma inversion and Proposition carleman | F1, F2, G | proved |
+| L | `Pkg/L.lean` | tangent ball, Kelvin transform, Lemma DC (partial Fourier transform) | F1, F4, F6 | proved |
 | MainA | `MainA.lean` | Theorem I(a) from the package statements | all | assembled |
 | MainB | `MainB.lean` | Theorem I(b) from the package statements | all | assembled |
 | Solution | `Solution.lean` | the statements of `Challenge.lean`, proved from `MainA` and `MainB` | MainA, MainB | assembled |

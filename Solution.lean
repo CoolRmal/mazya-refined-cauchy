@@ -1,6 +1,8 @@
 module
 
 public import MazyaRefinedCauchy
+public import MazyaRefinedCauchy.MainA
+public import MazyaRefinedCauchy.MainB
 
 @[expose] public section
 
@@ -40,8 +42,8 @@ theorem refined_cauchy_superexp {n : ℕ} (hn : 0 < n)
     (h : ℝ → ℝ)
     (hNeu : ∀ x ∈ boundaryPiece Γ ρ, |⟪a x (Du x), outerNormal Γ x⟫_ℝ| ≤ h ‖x‖)
     (hh : Tendsto (fun r => r * Real.log (1 / h r)) (𝓝[>] 0) atTop) :
-    ∃ ε > 0, ∀ x ∈ domain Γ ρ, ‖x‖ < ε → u x = 0 := by
-  sorry
+    ∃ ε > 0, ∀ x ∈ domain Γ ρ, ‖x‖ < ε → u x = 0 :=
+  mainA hn Γ hΓ hΓ0 ρ hρ a ha ha_symm ha_ell b hb c hc u Du hu hu_cont hDu_cont hDu hL hDir h hNeu hh
 
 /-- **Theorem I(b).** Let `u` be harmonic in the domain above the graph of a smooth `Γ`, with `u`
 and `∇u` (written `Du`) continuous up to the graph. Suppose the Dirichlet data vanish to infinite
@@ -66,7 +68,8 @@ theorem refined_cauchy_laplace {n : ℕ} (hn : 0 < n)
     (hΛ_growth : ∃ C σ₀ : ℝ, ∀ σ ≥ σ₀, ∀ t ≥ 0,
       Real.log (1 / h (Real.exp (-(σ + t)))) ≤ Real.exp (C * t) * Real.log (1 / h (Real.exp (-σ))))
     (hlog : Tendsto (fun ε => ∫ r in ε..ρ, Real.log (h r)) (𝓝[>] 0) atBot) :
-    ∃ ε > 0, ∀ x ∈ domain Γ ρ, ‖x‖ < ε → u x = 0 := by
-  sorry
+    ∃ ε > 0, ∀ x ∈ domain Γ ρ, ‖x‖ < ε → u x = 0 :=
+  mainB hn Γ hΓ hΓ0 ρ hρ u Du hu hu_cont hDu_cont hDu hDir h hNeu hh_pos hh_mono hΛ_super hΛ_convex
+    hΛ_growth hlog
 
 end MazyaRefinedCauchy

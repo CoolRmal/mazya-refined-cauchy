@@ -294,38 +294,76 @@ theorem gradient_inner_const (a y : Space n) : gradient (fun z => ⟪a, z⟫_ℝ
   have hd : HasFDerivAt (fun z => ⟪a, z⟫_ℝ) (innerSL ℝ a) y := (innerSL ℝ a).hasFDerivAt
   rw [inner_gradient_left, hd.fderiv, innerSL_apply_apply]
 
-/-- **The contract statement `carleman_conj` is false without the symmetry of `B`.**
-Counterexample in `Space 1 = ℝ²`: `μ = 1`, `B = e₁ ⊗ e₀` (constant, `B ξ = ⟪e₀, ξ⟫ e₁`),
-`φ = ⟪e₀, ·⟫`, `w = ⟪e₁, ·⟫`, `τ = 1`, `x = 0`. Then the left side equals
-`carlS + carlT + 1`, by `carleman_conj_general`. -/
-theorem not_carleman_conj : ¬ ∀ (μ : Space 1 → ℝ) (B : Space 1 → Space 1 →L[ℝ] Space 1)
-    (φ : Space 1 → ℝ) (τ : ℝ) (w : Space 1 → ℝ) (x : Space 1),
+/-- The statement of the contract theorem `carleman_conj` in dimension `n + 1`, as a proposition
+(used only to record exactly when it holds). -/
+def CarlemanConjStatement (n : ℕ) : Prop :=
+  ∀ (μ : Space n → ℝ) (B : Space n → Space n →L[ℝ] Space n)
+    (φ : Space n → ℝ) (τ : ℝ) (w : Space n → ℝ) (x : Space n),
     ContDiffAt ℝ 1 μ x → μ x ≠ 0 → ContDiffAt ℝ 1 B x → ContDiffAt ℝ 2 φ x →
     ContDiffAt ℝ 2 w x →
     Real.exp (τ * φ x)
         * divMu μ (fun y => B y (gradient (fun z => Real.exp (-τ * φ z) * w z) y)) x
-      = carlS μ B φ τ w x + carlT μ B φ τ w x := by
+      = carlS μ B φ τ w x + carlT μ B φ τ w x
+
+/-- **The contract statement `carleman_conj` is false without the symmetry of `B`.**
+For any orthonormal pair `e₀, e₁`, take `μ = 1`, `B = e₁ ⊗ e₀` (constant, `B ξ = ⟪e₀, ξ⟫ e₁`),
+`φ = ⟪e₀, ·⟫`, `w = ⟪e₁, ·⟫`, `τ = 1`, `x = 0`. Then the left side equals
+`carlS + carlT + 1`, by `carleman_conj_general`. -/
+theorem not_carleman_conj_of_orthonormal {e0 e1 : Space n} (h00 : ⟪e0, e0⟫_ℝ = 1)
+    (h01 : ⟪e0, e1⟫_ℝ = 0) (h11 : ⟪e1, e1⟫_ℝ = 1) : ¬ CarlemanConjStatement n := by
   intro h
-  have hlin : ∀ a : Space 1, ContDiffAt ℝ 2 (fun z : Space 1 => ⟪a, z⟫_ℝ) 0 :=
+  have hlin : ∀ a : Space n, ContDiffAt ℝ 2 (fun z : Space n => ⟪a, z⟫_ℝ) 0 :=
     fun a => (innerSL ℝ a).contDiff.contDiffAt
-  set e0 : Space 1 := EuclideanSpace.single 0 1 with he0
-  set e1 : Space 1 := EuclideanSpace.single 1 1 with he1
-  set B0 : Space 1 →L[ℝ] Space 1 := (innerSL ℝ e0).smulRight e1 with hB0
+  set B0 : Space n →L[ℝ] Space n := (innerSL ℝ e0).smulRight e1 with hB0
   have key := h (fun _ => 1) (fun _ => B0) (fun z => ⟪e0, z⟫_ℝ) 1 (fun z => ⟪e1, z⟫_ℝ) 0
     contDiffAt_const one_ne_zero contDiffAt_const (hlin e0) (hlin e1)
   have gen := carleman_conj_general (fun _ => 1) (fun _ => B0) (fun z => ⟪e0, z⟫_ℝ) 1
     (fun z => ⟪e1, z⟫_ℝ) 0 contDiffAt_const one_ne_zero contDiffAt_const (hlin e0) (hlin e1)
   rw [key, gradient_inner_const, gradient_inner_const] at gen
-  have h00 : ⟪e0, e0⟫_ℝ = 1 := by simp [he0]
-  have h01 : ⟪e0, e1⟫_ℝ = 0 := by
-    rw [he0, he1, EuclideanSpace.inner_single_left, PiLp.single_apply]
-    simp
-  have h11 : ⟪e1, e1⟫_ℝ = 1 := by simp [he1]
   have hc : ⟪B0 e0, e1⟫_ℝ - ⟪e0, B0 e1⟫_ℝ = 1 := by
     simp only [hB0, ContinuousLinearMap.smulRight_apply, innerSL_apply_apply, h00, h01, one_smul,
       zero_smul, inner_zero_right, h11, sub_zero]
   rw [hc] at gen
   linarith
+
+/-- The contract statement `carleman_conj` fails in every dimension `n + 1 ≥ 2`. -/
+theorem not_carleman_conj_of_pos (hn : 0 < n) : ¬ CarlemanConjStatement n := by
+  refine not_carleman_conj_of_orthonormal (e0 := EuclideanSpace.single 0 1)
+    (e1 := EuclideanSpace.single ⟨1, by omega⟩ 1) (by simp) ?_ (by simp)
+  rw [EuclideanSpace.inner_single_left, PiLp.single_apply]
+  simp [Fin.ext_iff]
+
+/-- Counterexample to `carleman_conj` in `Space 1 = ℝ²`. -/
+theorem not_carleman_conj : ¬ CarlemanConjStatement 1 :=
+  not_carleman_conj_of_pos one_pos
+
+/-- In `Space 0 = ℝ¹` every vector is a multiple of the unit vector. -/
+theorem space_zero_eq_smul (v : Space 0) : v = v 0 • EuclideanSpace.single 0 1 := by
+  ext i
+  fin_cases i
+  simp
+
+/-- In `Space 0 = ℝ¹` every linear operator is symmetric. -/
+theorem symm_of_space_zero (L : Space 0 →L[ℝ] Space 0) (ξ η : Space 0) :
+    ⟪L ξ, η⟫_ℝ = ⟪ξ, L η⟫_ℝ := by
+  rw [space_zero_eq_smul ξ, space_zero_eq_smul η]
+  simp only [map_smul, real_inner_smul_left, real_inner_smul_right]
+  rw [real_inner_comm (L (EuclideanSpace.single 0 1))]
+
+/-- The contract statement `carleman_conj` holds in dimension one (`n = 0`), where every `B x`
+is symmetric. -/
+theorem carleman_conj_zero : CarlemanConjStatement 0 :=
+  fun μ B φ τ w x hμ hμ0 hB hφ hw =>
+    carleman_conj_of_symm μ B φ τ w x hμ hμ0 hB (symm_of_space_zero (B x)) hφ hw
+
+/-- **Exactly when the contract statement `carleman_conj` holds**: only for `n = 0`. -/
+theorem carlemanConjStatement_iff : CarlemanConjStatement n ↔ n = 0 := by
+  constructor
+  · intro h
+    by_contra hn
+    exact not_carleman_conj_of_pos (Nat.pos_of_ne_zero hn) h
+  · rintro rfl
+    exact carleman_conj_zero
 
 end F2
 
@@ -338,9 +376,12 @@ theorem carleman_conj (μ : Space n → ℝ) (B : Space n → Space n →L[ℝ] 
         * divMu μ (fun y => B y (gradient (fun z => Real.exp (-τ * φ z) * w z) y)) x
       = carlS μ B φ τ w x + carlT μ B φ τ w x := by
   -- This statement is FALSE as stated: it lacks the symmetry hypothesis on `B` (the note assumes
-  -- `A` symmetric throughout). `F2.not_carleman_conj` is a formal counterexample for `n = 1`,
-  -- `F2.carleman_conj_general` gives the exact defect `τ (⟪B∇φ, ∇w⟫ - ⟪∇φ, B∇w⟫)`, and
-  -- `F2.carleman_conj_of_symm` is the corrected statement (proved). For `n = 0` it holds.
+  -- `A` symmetric throughout). `F2.carlemanConjStatement_iff` proves that it holds iff `n = 0`
+  -- (`F2.not_carleman_conj_of_pos`: counterexample in every dimension `≥ 2`;
+  -- `F2.carleman_conj_zero`: true in dimension one). `F2.carleman_conj_general` gives the exact
+  -- defect `τ (⟪B∇φ, ∇w⟫ - ⟪∇φ, B∇w⟫)`. With the extra hypothesis
+  -- `(hsymm : ∀ ξ η, ⟪B x ξ, η⟫_ℝ = ⟪ξ, B x η⟫_ℝ)` the proof is
+  -- `F2.carleman_conj_of_symm μ B φ τ w x hμ hμ0 hB hsymm hφ hw`.
   sorry
 
 /-- Lemma 2.1(2), pointwise: `2 (S w)(T w) μ = J + div(flux)`. Requires `B` symmetric. -/

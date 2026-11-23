@@ -172,7 +172,60 @@ lemma mem_tangentBall_iff {ν : Space n} (hν : ‖ν‖ = 1) {R : ℝ} (hR : 0 
 lemma closedBall_subset_tangentBall {ν : Space n} (hν : ‖ν‖ = 1) {R : ℝ} (hR : 0 < R)
     (hR2 : R ≤ 1 / 2) (y : Space n) (hy : 1 / (2 * R) + 1 < ⟪y, ν⟫_ℝ) :
     Metric.closedBall (kinv y) (‖y‖⁻¹ ^ 2 / 8) ⊆ Metric.ball (R • ν) R := by
-  sorry
+  intro x hx
+  rw [Metric.mem_closedBall, dist_eq_norm] at hx
+  have hp : ⟪y, ν⟫_ℝ ≤ ‖y‖ := by
+    have := real_inner_le_norm y ν
+    rwa [hν, mul_one] at this
+  have hsq : ‖x - R • ν‖ ^ 2 = ‖x‖ ^ 2 - 2 * R * ⟪x, ν⟫_ℝ + R ^ 2 := by
+    rw [norm_sub_sq_real, real_inner_smul_right, norm_smul, hν, Real.norm_eq_abs,
+      abs_of_pos hR]
+    ring
+  have hlam : 1 ≤ 1 / (2 * R) := by
+    rw [le_div_iff₀ (by positivity)]
+    linarith
+  have h2Rp : 1 + 2 * R < 2 * R * ⟪y, ν⟫_ℝ := by
+    have h1 := mul_lt_mul_of_pos_left hy (by positivity : (0 : ℝ) < 2 * R)
+    have h2 : 2 * R * (1 / (2 * R)) = 1 := by field_simp
+    rw [mul_add, h2] at h1
+    linarith
+  have hspos : 0 < ‖y‖ := by linarith
+  have hts : ‖y‖⁻¹ * ‖y‖ = 1 := inv_mul_cancel₀ hspos.ne'
+  have htpos : 0 < ‖y‖⁻¹ := inv_pos.2 hspos
+  have ht2R : ‖y‖⁻¹ < 2 * R := by
+    by_contra hcon
+    have : 2 * R * ‖y‖ ≤ ‖y‖⁻¹ * ‖y‖ := mul_le_mul_of_nonneg_right (not_lt.1 hcon) hspos.le
+    nlinarith
+  have ht1 : ‖y‖⁻¹ ≤ 1 := by
+    rw [inv_le_one₀ hspos]
+    linarith
+  have hxn : ‖x‖ ≤ ‖y‖⁻¹ + ‖y‖⁻¹ ^ 2 / 8 := by
+    have := norm_le_insert' x (kinv y)
+    rw [norm_kinv] at this
+    linarith
+  have hxi : ‖y‖⁻¹ ^ 2 * ⟪y, ν⟫_ℝ - ‖y‖⁻¹ ^ 2 / 8 ≤ ⟪x, ν⟫_ℝ := by
+    have e : ⟪x, ν⟫_ℝ = ⟪kinv y, ν⟫_ℝ + ⟪x - kinv y, ν⟫_ℝ := by
+      rw [← inner_add_left]
+      congr 1
+      abel
+    have h1 : |⟪x - kinv y, ν⟫_ℝ| ≤ ‖x - kinv y‖ := by
+      have := abs_real_inner_le_norm (x - kinv y) ν
+      rwa [hν, mul_one] at this
+    rw [inner_kinv] at e
+    have := neg_abs_le ⟪x - kinv y, ν⟫_ℝ
+    linarith
+  rw [Metric.mem_ball, dist_eq_norm, ← sq_lt_sq₀ (norm_nonneg _) hR.le, hsq]
+  set t := ‖y‖⁻¹ with ht_def
+  set p := ⟪y, ν⟫_ℝ with hp_def
+  have key : (1 + t / 8) ^ 2 < 2 * R * p - R / 4 := by nlinarith
+  have hx2 : ‖x‖ ^ 2 ≤ (t + t ^ 2 / 8) ^ 2 := pow_le_pow_left₀ (norm_nonneg _) hxn 2
+  have e2 : (t + t ^ 2 / 8) ^ 2 = t ^ 2 * (1 + t / 8) ^ 2 := by ring
+  have hlt : t ^ 2 * (1 + t / 8) ^ 2 < t ^ 2 * (2 * R * p - R / 4) :=
+    mul_lt_mul_of_pos_left key (by positivity)
+  have e3 : t ^ 2 * (2 * R * p - R / 4) = 2 * R * (t ^ 2 * p - t ^ 2 / 8) := by ring
+  have h4 : 2 * R * (t ^ 2 * p - t ^ 2 / 8) ≤ 2 * R * ⟪x, ν⟫_ℝ :=
+    mul_le_mul_of_nonneg_left hxi (by positivity)
+  nlinarith
 
 lemma norm_innerNormalZero_eq_one {Γ : (Fin n → ℝ) → ℝ} (hΓ0 : Γ 0 = 0) {ρ R : ℝ} (hR : 0 < R)
     (hball : Metric.ball (R • innerNormalZero Γ) R ⊆ domain Γ ρ) :
@@ -329,19 +382,177 @@ lemma psiOf_log {H : ℝ → ℝ} (hH : RegularProfile H) {C : ℝ} (hC : 0 < C)
   rw [hpsi, le_div_iff₀ hlogpos]
   nlinarith [mul_le_mul_of_nonneg_left hσhalf hM'0, mul_le_mul_of_nonneg_right hM' hlogpos.le]
 
+lemma sqrt_exp_eq (a : ℝ) : Real.sqrt (Real.exp a) = Real.exp (a / 2) := by
+  have e : Real.exp a = Real.exp (a / 2) ^ 2 := by
+    rw [← Real.exp_nat_mul]
+    congr 1
+    push_cast
+    ring
+  rw [e]
+  exact Real.sqrt_sq (Real.exp_pos _).le
+
+lemma sqrt_sqrt_eq {H : ℝ → ℝ} (hH_pos : ∀ r, 0 < r → 0 < H r) {C : ℝ} (hC : 0 < C) {s : ℝ}
+    (hs : 0 < s) : Real.sqrt (Real.sqrt (H (C / s))) = Real.exp (-psiOf H C s) ^ 2 := by
+  have hx : 0 < H (C / s) := hH_pos _ (div_pos hC hs)
+  have e : H (C / s) = Real.exp (Real.log (H (C / s))) := (Real.exp_log hx).symm
+  have hl : Real.log (1 / H (C / s)) = -Real.log (H (C / s)) := by
+    rw [one_div, Real.log_inv]
+  have hpsi : psiOf H C s = -(1 / 8) * Real.log (H (C / s)) := by
+    unfold psiOf
+    rw [hl]
+    ring
+  rw [hpsi, ← Real.exp_nat_mul]
+  conv_lhs => rw [e, sqrt_exp_eq, sqrt_exp_eq]
+  congr 1
+  push_cast
+  ring
+
 lemma psi_absorb {H : ℝ → ℝ} (hH_pos : ∀ r, 0 < r → 0 < H r)
     (hH_mono : MonotoneOn H (Set.Ioi 0)) (hH : RegularProfile H) {C : ℝ} (hC : 0 < C)
     (d : ℕ) (K : ℝ) (hK : 0 ≤ K) :
     ∃ Cu : ℝ, ∀ s : ℝ, 1 ≤ s →
       K * s ^ d * Real.sqrt (Real.sqrt (H (C / s))) ≤ Cu * Real.exp (-psiOf H C s) := by
-  sorry
+  obtain ⟨S₁, hS₁⟩ := eventually_atTop.1
+    (((psiOf_log hH hC).eventually (eventually_ge_atTop (d : ℝ))).and (eventually_gt_atTop 1))
+  set S : ℝ := max S₁ 1 with hS_def
+  set Cu : ℝ := K + K * S ^ d * Real.exp (-psiOf H C 1) with hCu_def
+  refine ⟨Cu, fun s hs => ?_⟩
+  have hspos : 0 < s := lt_of_lt_of_le one_pos hs
+  rw [sqrt_sqrt_eq hH_pos hC hspos]
+  have hE : 0 < Real.exp (-psiOf H C s) := Real.exp_pos _
+  have hKS : 0 ≤ K * S ^ d * Real.exp (-psiOf H C 1) := by
+    have : 0 ≤ S := le_trans zero_le_one (le_max_right _ _)
+    positivity
+  by_cases hsS : S₁ ≤ s
+  · obtain ⟨hd, hs1⟩ := hS₁ s hsS
+    have hlog : 0 < Real.log s := Real.log_pos hs1
+    rw [le_div_iff₀ hlog] at hd
+    have h1 : s ^ d * Real.exp (-psiOf H C s) ≤ 1 := by
+      have e : s ^ d = Real.exp (d * Real.log s) := by
+        rw [Real.exp_nat_mul, Real.exp_log hspos]
+      rw [e, ← Real.exp_add]
+      exact Real.exp_le_one_iff.2 (by linarith)
+    calc K * s ^ d * Real.exp (-psiOf H C s) ^ 2
+        = K * (s ^ d * Real.exp (-psiOf H C s)) * Real.exp (-psiOf H C s) := by ring
+      _ ≤ K * 1 * Real.exp (-psiOf H C s) := by gcongr
+      _ ≤ Cu * Real.exp (-psiOf H C s) := by
+        gcongr
+        rw [hCu_def]
+        linarith
+  · have hsS' : s ≤ S := le_trans (le_of_lt (not_le.1 hsS)) (le_max_left _ _)
+    have h1 : s ^ d ≤ S ^ d := pow_le_pow_left₀ hspos.le hsS' d
+    have h2 : Real.exp (-psiOf H C s) ≤ Real.exp (-psiOf H C 1) := by
+      rw [Real.exp_le_exp, neg_le_neg_iff]
+      exact psiOf_mono hH_pos hH_mono hC (Set.mem_Ioi.2 one_pos) (Set.mem_Ioi.2 hspos) hs
+    calc K * s ^ d * Real.exp (-psiOf H C s) ^ 2
+        = K * s ^ d * Real.exp (-psiOf H C s) * Real.exp (-psiOf H C s) := by ring
+      _ ≤ K * S ^ d * Real.exp (-psiOf H C 1) * Real.exp (-psiOf H C s) := by gcongr
+      _ ≤ Cu * Real.exp (-psiOf H C s) := by
+        gcongr
+        rw [hCu_def]
+        linarith
 
 lemma psiOf_not_integrable {ρ : ℝ} (hρ : 0 < ρ) (h H : ℝ → ℝ)
     (hh_pos : ∀ r ∈ Set.Ioo 0 ρ, 0 < h r) (hh_mono : MonotoneOn h (Set.Ioo 0 ρ))
     (hHh : ∀ r, 0 < r → r ≤ ρ / 2 → H r = h r) {C : ℝ} (hC : 0 < C)
     (hlog : Tendsto (fun ε => ∫ r in ε..(ρ / 2), Real.log (h r)) (𝓝[>] 0) atBot) :
     ¬ IntegrableOn (fun s => psiOf H C s / s ^ 2) (Set.Ici 1) := by
-  sorry
+  intro hint
+  set f : ℝ → ℝ := fun s => psiOf H C s / s ^ 2 with hf_def
+  set M : ℝ := ∫ s in Set.Ici (1 : ℝ), |f s| with hM_def
+  set S₀ : ℝ := max 1 (2 * C / ρ) with hS₀_def
+  have hS₀1 : 1 ≤ S₀ := le_max_left _ _
+  have hS₀pos : 0 < S₀ := lt_of_lt_of_le one_pos hS₀1
+  set c₀ : ℝ := C / S₀ with hc₀_def
+  have hc₀pos : 0 < c₀ := div_pos hC hS₀pos
+  have hc₀ρ : c₀ ≤ ρ / 2 := by
+    rw [hc₀_def, div_le_iff₀ hS₀pos]
+    have : 2 * C / ρ ≤ S₀ := le_max_right _ _
+    rw [div_le_iff₀ hρ] at this
+    linarith
+  -- `log ∘ h` is monotone on `(0, ρ)`, hence interval integrable on compact subintervals
+  have hmono_log : MonotoneOn (fun r => Real.log (h r)) (Set.Ioo 0 ρ) := by
+    intro a ha b hb hab
+    exact Real.log_le_log (hh_pos a ha) (hh_mono ha hb hab)
+  have hII : ∀ a b : ℝ, 0 < a → a ≤ b → b < ρ →
+      IntervalIntegrable (fun r => Real.log (h r)) volume a b := by
+    intro a b ha hab hb
+    apply MonotoneOn.intervalIntegrable
+    apply hmono_log.mono
+    rw [Set.uIcc_of_le hab]
+    intro x hx
+    exact ⟨lt_of_lt_of_le ha hx.1, lt_of_le_of_lt hx.2 hb⟩
+  set K₀ : ℝ := ∫ r in c₀..(ρ / 2), Real.log (h r) with hK₀_def
+  have hev : ∀ᶠ ε in 𝓝[>] (0 : ℝ),
+      (∫ r in ε..(ρ / 2), Real.log (h r)) ≤ -(8 * C * M) + K₀ - 1 :=
+    tendsto_atBot.1 hlog _
+  obtain ⟨ε, hεle, hε⟩ := (hev.and (Ioo_mem_nhdsGT hc₀pos)).exists
+  obtain ⟨hε0, hεc₀⟩ := hε
+  have hsplit : ∫ r in ε..(ρ / 2), Real.log (h r) = (∫ r in ε..c₀, Real.log (h r)) + K₀ :=
+    (intervalIntegral.integral_add_adjacent_intervals (hII ε c₀ hε0 hεc₀.le (by linarith))
+      (hII c₀ (ρ / 2) hc₀pos hc₀ρ (by linarith))).symm
+  -- the change of variables `r = C / s`
+  have himg : (fun s => C / s) '' Set.Ioo S₀ (C / ε) = Set.Ioo ε c₀ := by
+    ext r
+    simp only [Set.mem_image, Set.mem_Ioo]
+    constructor
+    · rintro ⟨s, ⟨hs1, hs2⟩, rfl⟩
+      have hspos : 0 < s := lt_trans hS₀pos hs1
+      constructor
+      · rw [lt_div_iff₀ hspos]
+        rw [lt_div_iff₀ hε0] at hs2
+        linarith
+      · exact div_lt_div_of_pos_left hC hS₀pos hs1
+    · rintro ⟨hr1, hr2⟩
+      have hrpos : 0 < r := lt_trans hε0 hr1
+      refine ⟨C / r, ⟨?_, ?_⟩, ?_⟩
+      · rw [lt_div_iff₀ hrpos]
+        rw [hc₀_def, lt_div_iff₀ hS₀pos] at hr2
+        linarith
+      · exact div_lt_div_of_pos_left hC hε0 hr1
+      · exact div_div_cancel₀ hC.ne'
+  have hderiv : ∀ s ∈ Set.Ioo S₀ (C / ε),
+      HasDerivWithinAt (fun s => C / s) (C * -(s ^ 2)⁻¹) (Set.Ioo S₀ (C / ε)) s := by
+    intro s hs
+    have hspos : 0 < s := lt_trans hS₀pos hs.1
+    have := (hasDerivAt_inv hspos.ne').const_mul C
+    simp only [div_eq_mul_inv]
+    exact this.hasDerivWithinAt
+  have hinj : Set.InjOn (fun s => C / s) (Set.Ioo S₀ (C / ε)) := by
+    intro a ha b hb hab
+    have hapos : 0 < a := lt_trans hS₀pos ha.1
+    have hbpos : 0 < b := lt_trans hS₀pos hb.1
+    simp only at hab
+    rw [div_eq_div_iff hapos.ne' hbpos.ne'] at hab
+    exact (mul_left_cancel₀ hC.ne' hab).symm
+  have hcv := integral_image_eq_integral_abs_deriv_smul measurableSet_Ioo hderiv hinj
+    (fun r => Real.log (h r))
+  rw [himg] at hcv
+  have hpt : Set.EqOn (fun s => |C * -(s ^ 2)⁻¹| • Real.log (h (C / s)))
+      (fun s => -(8 * C) * f s) (Set.Ioo S₀ (C / ε)) := by
+    intro s hs
+    have hspos : 0 < s := lt_trans hS₀pos hs.1
+    have hCs : 0 < C / s := div_pos hC hspos
+    have hCs2 : C / s ≤ ρ / 2 :=
+      le_trans (div_le_div_of_nonneg_left hC.le hS₀pos hs.1.le) hc₀ρ
+    simp only [hf_def, psiOf, smul_eq_mul]
+    rw [hHh _ hCs hCs2, one_div (h (C / s)), Real.log_inv, abs_mul, abs_neg, abs_of_pos hC,
+      abs_of_pos (by positivity : (0 : ℝ) < (s ^ 2)⁻¹)]
+    ring
+  have hcov : ∫ r in ε..c₀, Real.log (h r) = -(8 * C) * ∫ s in Set.Ioo S₀ (C / ε), f s := by
+    rw [intervalIntegral.integral_of_le hεc₀.le, integral_Ioc_eq_integral_Ioo, hcv,
+      setIntegral_congr_fun measurableSet_Ioo hpt, integral_const_mul]
+  -- the bound by `M`
+  have hbound : ∫ s in Set.Ioo S₀ (C / ε), f s ≤ M := by
+    have hsub : Set.Ioo S₀ (C / ε) ⊆ Set.Ici 1 := fun s hs => le_trans hS₀1 hs.1.le
+    calc ∫ s in Set.Ioo S₀ (C / ε), f s ≤ |∫ s in Set.Ioo S₀ (C / ε), f s| := le_abs_self _
+      _ ≤ ∫ s in Set.Ioo S₀ (C / ε), |f s| := abs_integral_le_integral_abs
+      _ ≤ M := setIntegral_mono_set hint.abs (ae_of_all _ (fun s => abs_nonneg _))
+          hsub.eventuallySubset
+  have h8 : -(8 * C * M) ≤ -(8 * C) * ∫ s in Set.Ioo S₀ (C / ε), f s := by
+    have := mul_le_mul_of_nonneg_left hbound (by positivity : (0 : ℝ) ≤ 8 * C)
+    linarith
+  linarith
 
 /-! ### `L²` bounds -/
 
@@ -349,7 +560,7 @@ lemma L2_bound_u (S : HalfBallSolution n) {Γ : (Fin n → ℝ) → ℝ} {ρ κ 
     (u : Space n → ℝ)
     (hFL2 : ∀ r ∈ Set.Ioc 0 S.R,
       ∫ x in domain Γ ρ ∩ Metric.ball 0 (r / κ), u x ^ 2 ≤ κ * ∫ X in halfBall n r, S.v X ^ 2)
-    (g : ℝ → ℝ) {Cd r₀ : ℝ} (hr₀ : 0 < r₀)
+    (g : ℝ → ℝ) {Cd r₀ : ℝ} (_hr₀ : 0 < r₀)
     (hdecay : ∀ r ∈ Set.Ioc 0 r₀,
       ∫ x in halfBall n r, (S.v x ^ 2 + r ^ 2 * ‖S.Dv x‖ ^ 2) ≤ Cd * Real.sqrt (g (Cd * r))) :
     ∀ s ∈ Set.Ioc 0 (min r₀ (S.R / 2) / κ),
@@ -379,6 +590,29 @@ lemma L2_bound_u (S : HalfBallSolution n) {Γ : (Fin n → ℝ) → ℝ} {ρ κ 
     _ ≤ κ * (Cd * Real.sqrt (g (Cd * (κ * s)))) :=
       mul_le_mul_of_nonneg_left (h2.trans h3) hκpos.le
 
+/-- `harmonic_abs_le_L2` with a nonnegative constant. -/
+lemma harmonic_abs_le_L2' (n : ℕ) : ∃ Cn : ℝ, 0 ≤ Cn ∧ ∀ (u : Space n → ℝ) (x : Space n) (r : ℝ),
+    0 < r → HarmonicOnNhd u (Metric.closedBall x r) →
+      |u x| ≤ Cn * r ^ (-((n + 1 : ℝ) / 2)) * Real.sqrt (∫ y in Metric.ball x r, u y ^ 2) := by
+  obtain ⟨Cn, hCn⟩ := harmonic_abs_le_L2 n
+  refine ⟨max Cn 0, le_max_right _ _, fun u x r hr hu => (hCn u x r hr hu).trans ?_⟩
+  have h1 : 0 ≤ r ^ (-((n + 1 : ℝ) / 2)) := Real.rpow_nonneg hr.le _
+  have h2 : 0 ≤ Real.sqrt (∫ y in Metric.ball x r, u y ^ 2) := Real.sqrt_nonneg _
+  have h3 : Cn ≤ max Cn 0 := le_max_left _ _
+  exact mul_le_mul_of_nonneg_right (mul_le_mul_of_nonneg_right h3 h1) h2
+
+/-- `(s⁻² / 8)^{-(n+1)/2} = (√8 s)^{n+1}`. -/
+lemma rpow_radius (n : ℕ) {s : ℝ} (hs : 0 < s) :
+    (s⁻¹ ^ 2 / 8) ^ (-((n + 1 : ℝ) / 2)) = (Real.sqrt 8 * s) ^ (n + 1) := by
+  have h8 : (0 : ℝ) < Real.sqrt 8 := Real.sqrt_pos.2 (by norm_num)
+  have e : s⁻¹ ^ 2 / 8 = ((Real.sqrt 8 * s) ^ 2)⁻¹ := by
+    rw [mul_pow, Real.sq_sqrt (by norm_num : (0 : ℝ) ≤ 8)]
+    field_simp
+  rw [e, Real.inv_rpow (by positivity), Real.rpow_neg (by positivity), inv_inv,
+    ← Real.rpow_natCast (Real.sqrt 8 * s) 2, ← Real.rpow_mul (by positivity)]
+  rw [show ((2 : ℕ) : ℝ) * ((n + 1 : ℝ) / 2) = ((n + 1 : ℕ) : ℝ) by push_cast; ring]
+  exact Real.rpow_natCast _ _
+
 /-- Pointwise bound for the Kelvin transform from the `L²` bound near `0`. -/
 lemma kelvin_bound {Γ : (Fin n → ℝ) → ℝ} (hΓc : Continuous Γ) {ρ : ℝ} (u : Space n → ℝ)
     (hu : HarmonicOnNhd u (domain Γ ρ)) (hu_cont : ContinuousOn u (domainWithBoundary Γ ρ))
@@ -389,8 +623,79 @@ lemma kelvin_bound {Γ : (Fin n → ℝ) → ℝ} (hΓc : Continuous Γ) {ρ : �
       ∫ x in domain Γ ρ ∩ Metric.ball 0 s, u x ^ 2 ≤ C₁ * Real.sqrt (H (C₂ * s))) :
     ∃ K : ℝ, 0 ≤ K ∧ ∀ y : Space n, 1 / (2 * R) + 1 < ⟪y, ν⟫_ℝ →
       |‖y‖ ^ (1 - (n : ℝ)) * u (‖y‖⁻¹ ^ 2 • y)|
-        ≤ K * ‖y‖ ^ (n + 1) * Real.sqrt (Real.sqrt (H (2 * C₂ / ‖y‖))) := by
-  sorry
+        ≤ K * ‖y‖ ^ 2 * Real.sqrt (Real.sqrt (H (2 * C₂ / ‖y‖))) := by
+  obtain ⟨Cn, hCn0, hCn⟩ := harmonic_abs_le_L2' n
+  refine ⟨Cn * Real.sqrt 8 ^ (n + 1) * Real.sqrt C₁, by positivity, fun y hy => ?_⟩
+  have hp : ⟪y, ν⟫_ℝ ≤ ‖y‖ := by
+    have := real_inner_le_norm y ν
+    rwa [hν, mul_one] at this
+  have hlam : 1 ≤ 1 / (2 * R) := by
+    rw [le_div_iff₀ (by positivity)]
+    linarith
+  have hs1 : 1 / (2 * R) + 1 < ‖y‖ := lt_of_lt_of_le hy hp
+  have hspos : 0 < ‖y‖ := by linarith
+  have h2s : 2 / ‖y‖ < 4 * R := by
+    rw [div_lt_iff₀ hspos]
+    have h1 := mul_lt_mul_of_pos_left hs1 (by positivity : (0 : ℝ) < 2 * R)
+    have h2 : 2 * R * (1 / (2 * R)) = 1 := by field_simp
+    rw [mul_add, h2] at h1
+    linarith
+  set r : ℝ := ‖y‖⁻¹ ^ 2 / 8 with hr_def
+  have hr : 0 < r := by positivity
+  have hsub : Metric.closedBall (kinv y) r ⊆ domain Γ ρ :=
+    (closedBall_subset_tangentBall hν hR hR2 y hy).trans hball
+  have hharm : HarmonicOnNhd u (Metric.closedBall (kinv y) r) := hu.mono hsub
+  have h1 := hCn u (kinv y) r hr hharm
+  have hsub2 : Metric.ball (kinv y) r ⊆ domain Γ ρ ∩ Metric.ball 0 (2 / ‖y‖) := by
+    intro x hx
+    refine ⟨hsub (Metric.ball_subset_closedBall hx), ?_⟩
+    rw [Metric.mem_ball, dist_zero_right]
+    rw [Metric.mem_ball, dist_eq_norm] at hx
+    have hx2 := norm_le_insert' x (kinv y)
+    rw [norm_kinv] at hx2
+    have ht1 : ‖y‖⁻¹ ≤ 1 := by
+      rw [inv_le_one₀ hspos]
+      linarith
+    have htpos : 0 < ‖y‖⁻¹ := inv_pos.2 hspos
+    have hr2 : r < ‖y‖⁻¹ := by
+      rw [hr_def]
+      nlinarith
+    rw [div_eq_mul_inv]
+    linarith
+  have h2sρ : 2 / ‖y‖ < ρ := by linarith
+  have hint := integrableOn_u_sq hΓc u hu_cont h2sρ
+  have hI : ∫ x in Metric.ball (kinv y) r, u x ^ 2 ≤ C₁ * Real.sqrt (H (C₂ * (2 / ‖y‖))) := by
+    refine le_trans ?_ (hL2 (2 / ‖y‖) ⟨by positivity, by linarith⟩)
+    exact setIntegral_mono_set hint (ae_of_all _ (fun x => sq_nonneg (u x)))
+      hsub2.eventuallySubset
+  have hsq : Real.sqrt (∫ x in Metric.ball (kinv y) r, u x ^ 2)
+      ≤ Real.sqrt C₁ * Real.sqrt (Real.sqrt (H (2 * C₂ / ‖y‖))) := by
+    rw [← Real.sqrt_mul hC₁, show 2 * C₂ / ‖y‖ = C₂ * (2 / ‖y‖) by ring]
+    exact Real.sqrt_le_sqrt hI
+  have hrp : r ^ (-((n + 1 : ℝ) / 2)) = (Real.sqrt 8 * ‖y‖) ^ (n + 1) := rpow_radius n hspos
+  have hu_le : |u (kinv y)| ≤ Cn * (Real.sqrt 8 * ‖y‖) ^ (n + 1) *
+      (Real.sqrt C₁ * Real.sqrt (Real.sqrt (H (2 * C₂ / ‖y‖)))) := by
+    rw [← hrp]
+    refine h1.trans ?_
+    have : 0 ≤ Cn * r ^ (-((n + 1 : ℝ) / 2)) :=
+      mul_nonneg hCn0 (Real.rpow_nonneg hr.le _)
+    exact mul_le_mul_of_nonneg_left hsq this
+  have hpow : ‖y‖ ^ (1 - (n : ℝ)) * ‖y‖ ^ (n + 1) = ‖y‖ ^ 2 := by
+    rw [← Real.rpow_natCast ‖y‖ (n + 1), ← Real.rpow_add hspos]
+    rw [show (1 - (n : ℝ)) + ((n + 1 : ℕ) : ℝ) = ((2 : ℕ) : ℝ) by push_cast; ring]
+    exact Real.rpow_natCast _ _
+  have hpos : 0 < ‖y‖ ^ (1 - (n : ℝ)) := Real.rpow_pos_of_pos hspos _
+  calc |‖y‖ ^ (1 - (n : ℝ)) * u (‖y‖⁻¹ ^ 2 • y)|
+      = ‖y‖ ^ (1 - (n : ℝ)) * |u (kinv y)| := by
+        rw [abs_mul, abs_of_pos hpos]
+        rfl
+    _ ≤ ‖y‖ ^ (1 - (n : ℝ)) * (Cn * (Real.sqrt 8 * ‖y‖) ^ (n + 1) *
+        (Real.sqrt C₁ * Real.sqrt (Real.sqrt (H (2 * C₂ / ‖y‖))))) :=
+        mul_le_mul_of_nonneg_left hu_le hpos.le
+    _ = Cn * Real.sqrt 8 ^ (n + 1) * Real.sqrt C₁ * (‖y‖ ^ (1 - (n : ℝ)) * ‖y‖ ^ (n + 1)) *
+        Real.sqrt (Real.sqrt (H (2 * C₂ / ‖y‖))) := by ring
+    _ = Cn * Real.sqrt 8 ^ (n + 1) * Real.sqrt C₁ * ‖y‖ ^ 2 *
+        Real.sqrt (Real.sqrt (H (2 * C₂ / ‖y‖))) := by rw [hpow]
 
 end MainBAux
 
@@ -549,7 +854,7 @@ theorem mainB {n : ℕ} (hn : 0 < n)
   set C₃ : ℝ := 2 * C₂ with hC₃_def
   have hC₃ : 0 < C₃ := by positivity
   set ψ : ℝ → ℝ := psiOf H C₃ with hψ_def
-  obtain ⟨Cu, hCu⟩ := psi_absorb hH_pos hH_mono hH_reg hC₃ (n + 1) K hK0
+  obtain ⟨Cu, hCu⟩ := psi_absorb hH_pos hH_mono hH_reg hC₃ 2 K hK0
   have hdecayU : ∀ y, lam + 1 < ⟪y, ν⟫_ℝ → |U y| ≤ Cu * Real.exp (-ψ ‖y‖) := by
     intro y hy
     have hy1 : 1 ≤ ‖y‖ := by

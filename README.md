@@ -5,10 +5,12 @@ Cauchy data are small at a single boundary point. They concern Problem 5.3 in
 V. Maz'ya, [*Seventy five (thousand) unsolved problems in analysis and partial differential
 equations*](https://users.mai.liu.se/vlama82/pdf/Problems2018l_0312.pdf) (2018).
 
-**Status: work in progress.** The statements in [`Challenge.lean`](Challenge.lean) are final
-candidates; the proofs are being formalized (see [`BLUEPRINT.md`](BLUEPRINT.md)). Until the
-development is free of `sorry`, CI runs Comparator in a work-in-progress mode that also permits
-`sorryAx`: it still checks that `Solution.lean` states exactly the theorems of `Challenge.lean`.
+**Status: complete.** Both theorems are proved. The development has no `sorry`, and both
+theorems depend only on the axioms `propext`, `Classical.choice` and `Quot.sound`. On every push,
+CI runs Comparator, which checks that [`Solution.lean`](Solution.lean) proves exactly the
+statements of [`Challenge.lean`](Challenge.lean) and replays the proofs through Lean's kernel and
+the independent kernels NanoDa and con-ron. [`BLUEPRINT.md`](BLUEPRINT.md) describes how the proof
+is organized.
 
 ## The statements
 
@@ -52,8 +54,8 @@ checks that `MazyaRefinedCauchy/Defs.lean` repeats the definitions of `Challenge
 
 ## Registry
 
-When the development is complete and Comparator passes, the project will be submitted to the
-[Palomar registry](https://palomar-registry.org/) through https://submit.palomar-registry.org/.
+The project is to be submitted to the [Palomar registry](https://palomar-registry.org/) through
+https://submit.palomar-registry.org/.
 
 ## Licence
 

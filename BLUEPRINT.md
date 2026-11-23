@@ -43,17 +43,28 @@ and `MainB`. Every file is checked on its own, so packages can be proved in para
 | U | `Pkg/U.lean` | weak unique continuation (local Carleman estimate, touching-ball argument) | F1, F2 | proved |
 | C | `Pkg/C.lean` | collar reduction to a flat boundary with conormal `e_d` (Lemma coords) | F1 | proved |
 | R1 | `Pkg/R1.lean` | Lemma R1: flat Cauchy data imply `∫_{B_r⁺} v² = O(r^M)` for every `M` (blow-up) | F1, F3, F4, U, G | proved |
-| R | `Pkg/R.lean` | Proposition R with Lemmas cyl and R2 (radial Carleman estimate) | F1, F2, F5, R1, G | in progress: Lemma R2 (`carleman`) |
+| R | `Pkg/R.lean` | Proposition R with Lemmas cyl and R2 (radial Carleman estimate) | F1, F2, F5, R1, G | proved |
 | PL | `Pkg/PL.lean` | Proposition PL with Lemma inversion and Proposition carleman | F1, F2, G | proved |
 | L | `Pkg/L.lean` | tangent ball, Kelvin transform, Lemma DC (partial Fourier transform) | F1, F4, F6 | proved |
-| MainA | `MainA.lean` | Theorem I(a) from the package statements | all | assembled |
-| MainB | `MainB.lean` | Theorem I(b) from the package statements | all | assembled |
-| Solution | `Solution.lean` | the statements of `Challenge.lean`, proved from `MainA` and `MainB` | MainA, MainB | assembled |
+| MainA | `MainA.lean` | Theorem I(a) from the package statements | all | proved |
+| MainB | `MainB.lean` | Theorem I(b) from the package statements | all | proved |
+| Solution | `Solution.lean` | the statements of `Challenge.lean`, proved from `MainA` and `MainB` | MainA, MainB | proved |
 
-Legend: **proved**: no `sorry` in the package or anything it uses (checked with `collectAxioms`:
-only `propext`, `Classical.choice`, `Quot.sound`); **proved modulo X**: no `sorry` in the file, but
-it uses a package that still has one; **assembled**: no `sorry` in the file, but it uses packages
-still in progress; **k sorry**: the file compiles with `k` occurrences of `sorry`.
+Legend: **proved** means that no declaration of the module depends on `sorryAx` (checked with
+`collectAxioms`), and that no axiom other than `propext`, `Classical.choice`, `Quot.sound` is used.
+
+## Verification
+
+* `lake build` builds every module; the only `sorry` are the two deliberate placeholders in
+  `Challenge.lean`.
+* `#print axioms` for `MazyaRefinedCauchy.refined_cauchy_superexp` and
+  `MazyaRefinedCauchy.refined_cauchy_laplace` (as proved in `Solution.lean`) gives
+  `[propext, Classical.choice, Quot.sound]`.
+* `lake comparator` with `comparator.json` (only the three standard axioms permitted) accepts the
+  solution with Lean's kernel, NanoDa and con-ron; CI runs it on every push.
+* The formal proof deviates from the note in one place: in Lemma R2 the `∇ div V` term is bounded
+  by Cauchy–Schwarz instead of an integration by parts along `A x`; this is legitimate there because
+  the constants may depend on `ε`.
 
 ## Corrections to the package interfaces
 

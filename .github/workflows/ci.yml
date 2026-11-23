@@ -140,8 +140,6 @@ jobs:
           sudo apt-get install -y -qq bubblewrap >/dev/null
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Run the toolchain's lake comparator
-        # ALLOW_SORRY=1 while the proof is in progress: the statements are still compared, and
-        # only sorryAx is tolerated. Remove it once the development has no sorry.
-        env:
-          ALLOW_SORRY: "1"
+        # Strict mode, as Palomar runs it: only propext, Quot.sound and Classical.choice are
+        # permitted, and Lean's kernel, NanoDa and con-ron must all accept the solution.
         run: ./scripts/verify-comparator.sh

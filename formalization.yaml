@@ -16,8 +16,7 @@ project:
     regularity conditions of Maz'ya and Havin, part (b) is, in local form, the sufficiency half of
     the first question of Problem 5.3 in Maz'ya's list of unsolved problems (2018): smooth domains
     in place of the half-space, for the Laplacian. Part (a) does not settle the second question: it
-    needs r log(1/h(r)) -> infinity and bounds the conormal derivative. Work in progress: the
-    proofs are not yet complete.
+    needs r log(1/h(r)) -> infinity and bounds the conormal derivative.
   authors:
     - "Yongxi (Aaron) Lin"
   license: "Apache-2.0"
@@ -57,11 +56,22 @@ related_formalizations: []
 
 status:
   scope: >-
-    Work in progress. The advertised statements are in Challenge.lean; their proofs are not yet
-    complete.
-  sorry_count: 5
+    Complete. Challenge.lean states Theorem I(a) and I(b); Solution.lean proves both, and
+    Comparator checks the match with Lean's kernel, NanoDa and con-ron.
+  sorry_count: 0
   sorry_in_definitions: 0
-  axioms: []
+  axioms: ["propext", "Classical.choice", "Quot.sound"]
+  main_results:
+    - declaration: "MazyaRefinedCauchy.refined_cauchy_superexp"
+      file: "Solution.lean"
+      sorry_count: 0
+      axioms: ["propext", "Classical.choice", "Quot.sound"]
+      comparator_config: "comparator.json"
+    - declaration: "MazyaRefinedCauchy.refined_cauchy_laplace"
+      file: "Solution.lean"
+      sorry_count: 0
+      axioms: ["propext", "Classical.choice", "Quot.sound"]
+      comparator_config: "comparator.json"
 
 automation:
   methods:
@@ -70,7 +80,7 @@ automation:
       framework: "Claude Code"
       tool_setup: "Claude Code agents and workflows writing Lean, checked with lake build and lake comparator"
       cost:
-        wall_time: "in progress"
+        wall_time: "about 5 hours of agent work on 2026-11-22/23, with up to 10 agents in parallel"
         spend_usd: "not tracked"
         hardware: "local machine"
       prompting_notes: "The informal proof of Theorem I was supplied to the agents as a blueprint."
@@ -98,10 +108,10 @@ fidelity:
     imposed on the whole boundary piece, including x = 0.
 
 review:
-  status: "self-assessed, in progress"
+  status: "agent-reviewed"
   reviewers:
     - "none yet"
-  notes: "Statement audited by independent AI reviewers; human review pending."
+  notes: "The statements were audited by independent AI reviewers; the maintainer's review is pending. The proofs are checked by Lean's kernel, NanoDa and con-ron through Comparator."
 
 alignment:
   namespace: "MazyaRefinedCauchy"
@@ -109,12 +119,12 @@ alignment:
     - source: "Theorem I(a)"
       lean: "MazyaRefinedCauchy.refined_cauchy_superexp"
       module: "Challenge"
-      status: "in progress"
+      status: "formalized"
       note: "Smooth setting with classical solutions; see fidelity."
     - source: "Theorem I(b)"
       lean: "MazyaRefinedCauchy.refined_cauchy_laplace"
       module: "Challenge"
-      status: "in progress"
+      status: "formalized"
       note: "Laplacian; the regularity conditions on h are restated in terms of Lambda (see fidelity item 5)."
 
 acknowledgements: "Mathlib; the Palomar template; Lean FRO's comparator."

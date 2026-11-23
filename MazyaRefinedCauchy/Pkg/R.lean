@@ -1138,15 +1138,30 @@ namespace W_R_carleman
 
 /-! ### Helpers for `RPkg.carleman`
 
-Structure of the proof (see the module docstring of `R.lean` and Lemma R2 of the note):
+**Status (end of round 2).** `RPkg.carleman` is proved from `core`, and `core` is proved from
+`main_lower`, `grad_control`, `back_to_f` and the real-number lemma `core_algebra` (with
+`C_J = 16 K² + 1`, `ε = 2 (5 K² + 2 C_J K / λ + 1)`, `rs = min(1/(4ε), 1/(4(K+1)), R/2, 1)`).
+Fully proved: `back_to_f`, `grad_control` (via `gc_pointwise`, `gc_div_integrable`,
+`gc_boundary`, `gc_pointwise_bound`), the weight calculus (`gradient_phiR`, `carlV_eq`,
+`inner_carlV_ed`, `inner_BR_WC_ed`, `carlQ_le`, `gradient_wC`, `conj_eq`), the `L²` bound
+`integrableOn_SpC_sq`, `main_lower` from its pieces, `ml_pointwise`, `ml_boundaryM` and
+`ml_boundary` (from `ml_boundaryC` and `ml_boundaryM`).
 
-* `core` — the Carleman estimate for `P₀` itself (`K₁ = 0`, `F = P₀ f`), with the integrability
-  of `μ e^{2τφ} (P₀ f)²` as a hypothesis. **This is the analytic heart; see its docstring for the
-  detailed plan.**
-* `continuousOn_P0R` — `P₀ f` is continuous on the open half-space (measurability of `P₀ f`).
-* `integrableOn_of_annulus` and the continuity lemmas — integrability of the left-hand integrands.
-* `ptwise_real`, `final_algebra` — the absorption of the perturbation `K₁ ρ (ρ |∇f| + |f|)`.
-* `RPkg.carleman` is assembled from these at the end. -/
+**Remaining sorries** (all in the `main_lower` block, all believed true):
+* `ml_J_lower` — the pointwise lower bound of `carlJ` (calculus of `V = -(1-ερ) A x`,
+  `q = (1-ερ)² ⟪A x, x⟫/ρ²`, `DV`, `DB`, and a bound `C_h` for `∇ div_μ V` on `0 < ρ ≤ rs`;
+  see its docstring for the three estimates and constants).
+* `ml_div_integrable` — copy the proof of `gc_div_integrable`, using `ml_pointwise` (needs
+  continuity away from `0` of `gradient carlQ`, `fderiv carlV`, `fderiv BR`,
+  `gradient (divMu μ V)`, all from `C²` of `A`; and the formula for `div MFlux` proved inside
+  `ml_pointwise`).
+* `ml_boundaryC` — copy the proof of `gc_boundary` with the flux `CFlux` (regularity and
+  support exactly as for `GFlux`/`MFlux`); on `t = 0` the integrand is
+  `μ ρ² e^{τφ} ⟪A Df, e_d⟫ (-4τ ⟪V, W⟫ - 2τ (div_μ V) w)` (the `V`-terms vanish by
+  `inner_carlV_ed`), bounded with `|V| ≤ K ρ` (`carlV_eq`), `ρ |W| ≤ e^{τφ} (ρ |Df| + τ |f|)`
+  and a bound `|div_μ V| ≤ C_h0` on `0 < ρ ≤ rs` (e.g. `C_h0 = sup` of the continuous function
+  `ρ⁻¹ div_μ V`, or an explicit formula `div_μ V = (1-ερ)(d ⟪Ax,x⟫/ρ² - tr A - tr(DA(·)x))
+  + ε ⟪Ax,x⟫/ρ`). Then `CB = 4K + 2 C_h0` works for `τ ≥ 1`. -/
 
 open RPkg
 
@@ -1684,7 +1699,25 @@ theorem gc_pointwise (S : HalfBallSolution n) {ε τ rs δ : ℝ} {f : Space n �
         + τ ^ 2 * carlQ (BR S.A) (phiR ε) x * ‖x‖ * wC ε τ f x ^ 2 * muR n x
         - muR n x * wC ε τ f x * ⟪BR S.A x (WC ε τ f Df x), ‖x‖⁻¹ • x⟫_ℝ
         + divergence (GFlux S ε τ f Df) x := by
-  sorry
+  have hx0 := ne_zero_of_vcoord_pos hx
+  have hU : {x : Space n | 0 < vcoord x} ∈ 𝓝 x :=
+    (isOpen_lt continuous_const F1.continuous_vcoord).mem_nhds hx
+  have key := MazyaRefinedCauchy.carleman_gradient_pointwise (muR n) (BR S.A) (phiR ε) τ (wC ε τ f)
+    (fun y => ‖y‖) x (contDiffAt_muR hx0) (muR_ne_zero hx0)
+    ((contDiff_BR S).contDiffAt.of_le (by norm_num)) (contDiffAt_wC hadm hx)
+    (contDiffAt_norm ℝ hx0)
+  beta_reduce at key
+  have hev : (fun y => (muR n y * ‖y‖ * wC ε τ f y) • BR S.A y (gradient (wC ε τ f) y))
+      =ᶠ[𝓝 x] GFlux S ε τ f Df := by
+    filter_upwards [hU] with y hy
+    simp only [GFlux, gradient_wC hadm hy]
+  rw [F2.divergence_congr hev, gradient_wC hadm hx, gradient_norm' hx0] at key
+  have hS : carlS (muR n) (BR S.A) (phiR ε) τ (wC ε τ f) x
+      = SpC S ε τ f x + mR n ^ 2 * wC ε τ f x := by
+    simp only [SpC]; ring
+  rw [hS] at key
+  rw [key]
+  ring
 
 /-- **(GC2)** `div GFlux` is integrable on the open half-space (by `gc_pointwise` it is a sum of
 integrable terms: use `integrableOn_SpC_sq`, `integrableOn_X`, `integrableOn_Y`, continuity of
@@ -1694,7 +1727,115 @@ theorem gc_div_integrable (S : HalfBallSolution n) {ε τ rs δ : ℝ} {f : Spac
     (hPi : IntegrableOn (fun x => muR n x * Real.exp (2 * τ * phiR ε x) * P0R S.A f x ^ 2)
       {x | 0 < vcoord x}) :
     IntegrableOn (divergence (GFlux S ε τ f Df)) {x | 0 < vcoord x} := by
-  sorry
+  have hΩm : MeasurableSet {x : Space n | 0 < vcoord x} := F1.measurableSet_halfSpace 0
+  have hSi := integrableOn_SpC_sq S hadm hPi
+  have hwS : ∀ x, wC ε τ f x ≠ 0 → δ ≤ ‖x‖ ∧ ‖x‖ ≤ rs := wC_supp hadm
+  have hWS : ∀ x, WC ε τ f Df x ≠ 0 → δ ≤ ‖x‖ ∧ ‖x‖ ≤ rs := WC_supp hadm
+  -- T1 = ρ μ ⟪B W, W⟫
+  have h1 : IntegrableOn
+      (fun x => ‖x‖ * muR n x * ⟪BR S.A x (WC ε τ f Df x), WC ε τ f Df x⟫_ℝ)
+      {x | 0 < vcoord x} := by
+    refine integrableOn_of_annulus (rs := rs) hadm.pos (fun x hx => hWS x ?_) fun x hx hx0 => ?_
+    · intro h; apply hx; simp [h]
+    · have hB := (contDiff_BR S).continuous.continuousAt (x := x)
+      have hW := continuousWithinAt_WC (ε := ε) (τ := τ) hadm hx hx0
+      exact ((continuous_norm.continuousAt.mul (continuousAt_muR hx0)).continuousWithinAt).mul
+        ((hB.continuousWithinAt.clm_apply hW).inner hW)
+  -- T3 = m² ρ μ w²
+  have hw2 : IntegrableOn (fun x => ‖x‖ * muR n x * wC ε τ f x ^ 2) {x | 0 < vcoord x} := by
+    refine integrableOn_of_annulus (rs := rs) hadm.pos (fun x hx => hwS x ?_) fun x hx hx0 => ?_
+    · intro h; apply hx; simp [h]
+    · exact ((continuous_norm.continuousAt.mul (continuousAt_muR hx0)).continuousWithinAt).mul
+        ((continuousWithinAt_wC hadm hx hx0).pow 2)
+  have h3 : IntegrableOn (fun x => mR n ^ 2 * (‖x‖ * muR n x * wC ε τ f x ^ 2))
+      {x | 0 < vcoord x} := hw2.const_mul _
+  -- T4 = τ² q ρ w² μ
+  have h4 : IntegrableOn
+      (fun x => τ ^ 2 * carlQ (BR S.A) (phiR ε) x * ‖x‖ * wC ε τ f x ^ 2 * muR n x)
+      {x | 0 < vcoord x} := by
+    refine integrableOn_of_annulus (rs := rs) hadm.pos (fun x hx => hwS x ?_) fun x hx hx0 => ?_
+    · intro h; apply hx; simp [h]
+    · have hg : ContinuousAt (gradient (phiR ε)) x :=
+        (F2.contDiffAt_gradient (m := 0) (contDiffAt_phiR ε hx0 (k := 1)) (by norm_num)).continuousAt
+      have hq : ContinuousAt (carlQ (BR S.A) (phiR ε)) x :=
+        ((contDiff_BR S).continuous.continuousAt.clm_apply hg).inner hg
+      exact ((((continuousAt_const.mul hq).mul continuous_norm.continuousAt).continuousWithinAt).mul
+        ((continuousWithinAt_wC hadm hx hx0).pow 2)).mul (continuousAt_muR hx0).continuousWithinAt
+  -- T5 = μ w ⟪B W, x / ρ⟫
+  have h5 : IntegrableOn
+      (fun x => muR n x * wC ε τ f x * ⟪BR S.A x (WC ε τ f Df x), ‖x‖⁻¹ • x⟫_ℝ)
+      {x | 0 < vcoord x} := by
+    refine integrableOn_of_annulus (rs := rs) hadm.pos (fun x hx => hwS x ?_) fun x hx hx0 => ?_
+    · intro h; apply hx; simp [h]
+    · have hB := (contDiff_BR S).continuous.continuousAt (x := x)
+      have hW := continuousWithinAt_WC (ε := ε) (τ := τ) hadm hx hx0
+      have hx' : ContinuousAt (fun y : Space n => ‖y‖⁻¹ • y) x :=
+        (continuous_norm.continuousAt.inv₀ (norm_ne_zero_iff.2 hx0)).smul continuousAt_id
+      exact ((continuousAt_muR hx0).continuousWithinAt.mul (continuousWithinAt_wC hadm hx hx0)).mul
+        ((hB.continuousWithinAt.clm_apply hW).inner hx'.continuousWithinAt)
+  -- T2 = S'w ρ w μ, dominated by `(μ S'w² + ρ² μ w²) / 2`
+  have hρ2 : IntegrableOn (fun x => ‖x‖ ^ 2 * muR n x * wC ε τ f x ^ 2) {x | 0 < vcoord x} := by
+    refine integrableOn_of_annulus (rs := rs) hadm.pos (fun x hx => hwS x ?_) fun x hx hx0 => ?_
+    · intro h; apply hx; simp [h]
+    · exact (((continuous_norm.continuousAt.pow 2).mul (continuousAt_muR hx0)).continuousWithinAt).mul
+        ((continuousWithinAt_wC hadm hx hx0).pow 2)
+  have hSc : ContinuousOn (SpC S ε τ f) {x | 0 < vcoord x} := by
+    intro x hx
+    have hx0 := ne_zero_of_vcoord_pos hx
+    have hid : ∀ y ∈ {x : Space n | 0 < vcoord x},
+        SpC S ε τ f y = Real.exp (τ * phiR ε y) * P0R S.A f y - TWC S ε τ f Df y := by
+      intro y hy
+      rw [conj_eq S ε τ hadm hy, carlT_eq S hadm hy]
+      ring
+    have h1 : ContinuousWithinAt
+        (fun y => Real.exp (τ * phiR ε y) * P0R S.A f y - TWC S ε τ f Df y)
+        {x | 0 < vcoord x} x :=
+      ((continuousAt_expPhi ε τ hx0).continuousWithinAt.mul
+        (continuousOn_P0R S hadm.c2 x hx)).sub
+        ((continuousWithinAt_TWC S hadm (le_of_lt hx) hx0).mono
+          fun y (hy : 0 < vcoord y) => (le_of_lt hy : 0 ≤ vcoord y))
+    exact h1.congr (fun y hy => hid y hy) (hid x hx)
+  have h2 : IntegrableOn (fun x => SpC S ε τ f x * ‖x‖ * wC ε τ f x * muR n x)
+      {x | 0 < vcoord x} := by
+    have hdom : IntegrableOn (fun x => muR n x * SpC S ε τ f x ^ 2
+        + ‖x‖ ^ 2 * muR n x * wC ε τ f x ^ 2) {x | 0 < vcoord x} := hSi.add hρ2
+    have hmeas : ContinuousOn (fun x => SpC S ε τ f x * ‖x‖ * wC ε τ f x * muR n x)
+        {x | 0 < vcoord x} := by
+      intro x hx
+      have hx0 := ne_zero_of_vcoord_pos hx
+      exact (((hSc x hx).mul continuous_norm.continuousAt.continuousWithinAt).mul
+        ((continuousWithinAt_wC hadm (le_of_lt hx) hx0).mono
+          fun y (hy : 0 < vcoord y) => (le_of_lt hy : 0 ≤ vcoord y))).mul
+        (continuousAt_muR hx0).continuousWithinAt
+    refine Integrable.mono' hdom (hmeas.aestronglyMeasurable hΩm) ?_
+    refine (ae_restrict_iff' hΩm).2 (Eventually.of_forall fun x _ => ?_)
+    have hμ := muR_nonneg x
+    rw [Real.norm_eq_abs]
+    have e : |SpC S ε τ f x * ‖x‖ * wC ε τ f x * muR n x|
+        = muR n x * (|SpC S ε τ f x| * |‖x‖ * wC ε τ f x|) := by
+      rw [abs_mul, abs_mul, abs_mul, abs_mul, abs_of_nonneg hμ, abs_of_nonneg (norm_nonneg x)]
+      ring
+    rw [e]
+    have h0 : |SpC S ε τ f x| * |‖x‖ * wC ε τ f x|
+        ≤ SpC S ε τ f x ^ 2 + (‖x‖ * wC ε τ f x) ^ 2 := by
+      nlinarith [sq_nonneg (|SpC S ε τ f x| - |‖x‖ * wC ε τ f x|), sq_abs (SpC S ε τ f x),
+        sq_abs (‖x‖ * wC ε τ f x)]
+    have h6 := mul_le_mul_of_nonneg_left h0 hμ
+    calc muR n x * (|SpC S ε τ f x| * |‖x‖ * wC ε τ f x|)
+        ≤ muR n x * (SpC S ε τ f x ^ 2 + (‖x‖ * wC ε τ f x) ^ 2) := h6
+      _ = muR n x * SpC S ε τ f x ^ 2 + ‖x‖ ^ 2 * muR n x * wC ε τ f x ^ 2 := by ring
+  -- assemble
+  have hsum : IntegrableOn (fun x =>
+      ‖x‖ * muR n x * ⟪BR S.A x (WC ε τ f Df x), WC ε τ f Df x⟫_ℝ
+        + SpC S ε τ f x * ‖x‖ * wC ε τ f x * muR n x
+        + mR n ^ 2 * (‖x‖ * muR n x * wC ε τ f x ^ 2)
+        - τ ^ 2 * carlQ (BR S.A) (phiR ε) x * ‖x‖ * wC ε τ f x ^ 2 * muR n x
+        + muR n x * wC ε τ f x * ⟪BR S.A x (WC ε τ f Df x), ‖x‖⁻¹ • x⟫_ℝ)
+      {x | 0 < vcoord x} := (((h1.add h2).add h3).sub h4).add h5
+  refine hsum.congr_fun (fun x hx => ?_) hΩm
+  have := gc_pointwise S (ε := ε) (τ := τ) hadm hx
+  simp only
+  linarith
 
 /-- **(GC3)** The boundary term: by `F1.integral_divergence_halfSpace_of_continuousOn`,
 `∫ div GFlux = -∫ ⟪GFlux (lift y 0), e_d⟫`, and on `t = 0`,
@@ -1705,7 +1846,178 @@ theorem gc_boundary (S : HalfBallSolution n) {ε τ rs δ : ℝ} {f : Space n �
     (hPi : IntegrableOn (fun x => muR n x * Real.exp (2 * τ * phiR ε x) * P0R S.A f x ^ 2)
       {x | 0 < vcoord x}) :
     ∫ x in {x : Space n | 0 < vcoord x}, divergence (GFlux S ε τ f Df) x ≤ IBd S ε τ f Df := by
-  sorry
+  have hf0 : ∀ y : Space n, ‖y‖ < δ → f y = 0 := fun y hy => by
+    by_contra h
+    have := (hadm.supp y h).1
+    linarith
+  have hf0' : ∀ y : Space n, rs < ‖y‖ → f y = 0 := fun y hy => by
+    by_contra h
+    have := (hadm.supp y h).2
+    linarith
+  -- regularity of the flux
+  have hC1 : ∀ x, 0 < vcoord x → ContDiffAt ℝ 1 (GFlux S ε τ f Df) x := by
+    intro x hx
+    have hx0 := ne_zero_of_vcoord_pos hx
+    have hU : {x : Space n | 0 < vcoord x} ∈ 𝓝 x :=
+      (isOpen_lt continuous_const F1.continuous_vcoord).mem_nhds hx
+    have hev : GFlux S ε τ f Df =ᶠ[𝓝 x]
+        fun y => (muR n y * ‖y‖ * wC ε τ f y) • BR S.A y (gradient (wC ε τ f) y) := by
+      filter_upwards [hU] with y hy
+      simp only [GFlux, gradient_wC hadm hy]
+    have h1 : ContDiffAt ℝ 1
+        (fun y => (muR n y * ‖y‖ * wC ε τ f y) • BR S.A y (gradient (wC ε τ f) y)) x :=
+      (((contDiffAt_muR hx0).mul (contDiffAt_norm ℝ hx0)).mul
+        ((contDiffAt_wC hadm hx).of_le (by norm_num))).smul
+        (((contDiff_BR S).contDiffAt.of_le (by norm_num)).clm_apply
+          (F2.contDiffAt_gradient (m := 1) (contDiffAt_wC hadm hx) (by norm_num)))
+    exact h1.congr_of_eventuallyEq hev
+  have hcont : ContinuousOn (GFlux S ε τ f Df) {x | 0 ≤ vcoord x} := by
+    intro x hx
+    by_cases hx0 : x = 0
+    · have hev : GFlux S ε τ f Df =ᶠ[𝓝 x] fun _ => 0 := by
+        filter_upwards [Metric.ball_mem_nhds x hadm.pos] with y hy
+        rw [Metric.mem_ball, hx0, dist_zero_right] at hy
+        simp [GFlux, wC, hf0 y hy]
+      exact (continuousAt_const.congr hev.symm).continuousWithinAt
+    · exact ((((continuousAt_muR hx0).mul continuous_norm.continuousAt).continuousWithinAt.mul
+        (continuousWithinAt_wC hadm hx hx0)).smul
+        ((contDiff_BR S).continuous.continuousAt.continuousWithinAt.clm_apply
+          (continuousWithinAt_WC hadm hx hx0)))
+  have hsupp : HasCompactSupport (GFlux S ε τ f Df) := by
+    refine HasCompactSupport.intro (isCompact_closedBall (0 : Space n) rs) fun y hy => ?_
+    rw [Metric.mem_closedBall, dist_zero_right, not_le] at hy
+    simp [GFlux, wC, hf0' y hy]
+  have hIBP := integral_divergence_halfSpace_of_continuousOn (GFlux S ε τ f Df) hC1 hcont hsupp
+    (gc_div_integrable S hadm hrsR hPi)
+  rw [hIBP]
+  -- the boundary integrand is bounded by that of `IBd`
+  set g : EuclideanSpace ℝ (Fin n) → ℝ := fun y =>
+    ‖lift y 0‖ ^ 2 * muR n (lift y 0) * Real.exp (2 * τ * phiR ε (lift y 0)) *
+      (|⟪S.A (lift y 0) (Df (lift y 0)), ed n⟫_ℝ| *
+        (‖lift y 0‖ * ‖Df (lift y 0)‖ + |f (lift y 0)|)) with hg
+  have hpt : ∀ y : EuclideanSpace ℝ (Fin n), ‖⟪GFlux S ε τ f Df (lift y 0), ed n⟫_ℝ‖ ≤ g y := by
+    intro y
+    set x := lift y 0 with hxd
+    have hμ := muR_nonneg x
+    have hg0 : 0 ≤ g y := by
+      simp only [hg]
+      positivity
+    by_cases hfx : f x = 0
+    · have : GFlux S ε τ f Df x = 0 := by simp [GFlux, wC, hfx]
+      rw [this, inner_zero_left, norm_zero]
+      exact hg0
+    · obtain ⟨hδx, hxr⟩ := hadm.supp x hfx
+      have hx0 : x ≠ 0 := by
+        intro h; rw [h, norm_zero] at hδx; linarith [hadm.pos]
+      have hxf : x ∈ flatPiece n S.R := ⟨by linarith, by rw [hxd, vcoord_lift]⟩
+      have hρ1 : ‖x‖ ≤ 1 := hxr.trans hrs1
+      have hinner : ⟪GFlux S ε τ f Df x, ed n⟫_ℝ
+          = muR n x * ‖x‖ * wC ε τ f x
+            * (‖x‖ ^ 2 * Real.exp (τ * phiR ε x) * ⟪S.A x (Df x), ed n⟫_ℝ) := by
+        rw [← inner_BR_WC_ed S ε τ f Df hx0 hxf]
+        simp only [GFlux, real_inner_smul_left]
+      have hE2 : Real.exp (2 * τ * phiR ε x) = Real.exp (τ * phiR ε x) * Real.exp (τ * phiR ε x) := by
+        rw [← Real.exp_add]; ring_nf
+      have hE0 : 0 < Real.exp (τ * phiR ε x) := Real.exp_pos _
+      obtain ⟨E, hEd⟩ : ∃ e, e = Real.exp (τ * phiR ε x) := ⟨_, rfl⟩
+      obtain ⟨Ai, hAid⟩ : ∃ a, a = ⟪S.A x (Df x), ed n⟫_ℝ := ⟨_, rfl⟩
+      have hE0' : 0 ≤ E := by rw [hEd]; exact hE0.le
+      have hinner' : ⟪GFlux S ε τ f Df x, ed n⟫_ℝ
+          = (‖x‖ ^ 2 * muR n x * (E * E)) * (‖x‖ * (f x * Ai)) := by
+        rw [hinner, hEd, hAid]; simp only [wC]; ring
+      have hgy : g y = (‖x‖ ^ 2 * muR n x * (E * E)) * (|Ai| * (‖x‖ * ‖Df x‖ + |f x|)) := by
+        simp only [hg]
+        rw [← hxd, hE2, ← hEd, ← hAid]
+      have hfac : 0 ≤ ‖x‖ ^ 2 * muR n x * (E * E) := by positivity
+      rw [hinner', hgy, Real.norm_eq_abs, abs_mul, abs_of_nonneg hfac, abs_mul,
+        abs_of_nonneg (norm_nonneg x), abs_mul]
+      apply mul_le_mul_of_nonneg_left _ hfac
+      have hf1 : ‖x‖ * |f x| ≤ ‖x‖ * ‖Df x‖ + |f x| := by
+        have : ‖x‖ * |f x| ≤ 1 * |f x| := mul_le_mul_of_nonneg_right hρ1 (abs_nonneg _)
+        have : 0 ≤ ‖x‖ * ‖Df x‖ := by positivity
+        linarith
+      have hA0 := abs_nonneg Ai
+      calc ‖x‖ * (|f x| * |Ai|) = |Ai| * (‖x‖ * |f x|) := by ring
+        _ ≤ |Ai| * (‖x‖ * ‖Df x‖ + |f x|) := mul_le_mul_of_nonneg_left hf1 hA0
+  -- integrability of `g`
+  have hgi : Integrable g := by
+    have hl : Continuous (fun z : EuclideanSpace ℝ (Fin n) => lift z 0) := F1.continuous_lift_left 0
+    have hmem : ∀ z : EuclideanSpace ℝ (Fin n), lift z 0 ∈ {x : Space n | 0 ≤ vcoord x} :=
+      fun z => by simp [vcoord_lift]
+    have hDf0 : ∀ y : Space n, ‖y‖ < δ → Df y = 0 := fun y hy => by
+      by_contra h
+      have := (hadm.Dsupp y h).1
+      linarith
+    have hDf0' : ∀ y : Space n, rs < ‖y‖ → Df y = 0 := fun y hy => by
+      by_contra h
+      have := (hadm.Dsupp y h).2
+      linarith
+    have hgc : Continuous g := by
+      rw [continuous_iff_continuousAt]
+      intro y
+      by_cases hy : ‖y‖ < δ
+      · have hev : g =ᶠ[𝓝 y] fun _ => 0 := by
+          filter_upwards [(isOpen_lt continuous_norm continuous_const).mem_nhds hy] with z hz
+          have hz' : ‖lift z 0‖ < δ := by rw [norm_lift_zero]; exact hz
+          simp [hg, hf0 _ hz', hDf0 _ hz']
+        exact continuousAt_const.congr hev.symm
+      · push Not at hy
+        have hx0 : lift y 0 ≠ 0 := by
+          intro h
+          have := norm_lift_zero y
+          rw [h, norm_zero] at this
+          linarith [hadm.pos]
+        have hfc : ContinuousAt (fun z => f (lift z 0)) y :=
+          (hadm.cont.comp_continuous hl hmem).continuousAt
+        have hDfc : ContinuousAt (fun z => Df (lift z 0)) y :=
+          (hadm.Dcont.comp_continuous hl hmem).continuousAt
+        have hμ : ContinuousAt (fun z => muR n (lift z 0)) y :=
+          ContinuousAt.comp (g := muR n) (f := fun z : EuclideanSpace ℝ (Fin n) => lift z 0)
+            (x := y) (continuousAt_muR hx0) hl.continuousAt
+        have hφ : ContinuousAt (fun z => Real.exp (2 * τ * phiR ε (lift z 0))) y :=
+          Real.continuous_exp.continuousAt.comp
+            (continuousAt_const.mul (ContinuousAt.comp (g := phiR ε)
+              (f := fun z : EuclideanSpace ℝ (Fin n) => lift z 0) (x := y)
+              (continuousAt_phiR ε hx0) hl.continuousAt))
+        have hA : ContinuousAt (fun z => S.A (lift z 0)) y :=
+          S.coeffs.contDiff_A.continuous.continuousAt.comp hl.continuousAt
+        exact (((hl.norm.continuousAt.pow 2).mul hμ).mul hφ).mul
+          (((hA.clm_apply hDfc).inner continuousAt_const).abs.mul
+            ((hl.norm.continuousAt.mul hDfc.norm).add hfc.abs))
+    have hgs : HasCompactSupport g := by
+      refine HasCompactSupport.intro (isCompact_closedBall (0 : EuclideanSpace ℝ (Fin n)) rs)
+        fun y hy => ?_
+      rw [Metric.mem_closedBall, dist_zero_right, not_le] at hy
+      have hy' : rs < ‖lift y 0‖ := by rw [norm_lift_zero]; exact hy
+      simp [hg, hf0' _ hy', hDf0' _ hy']
+    exact hgc.integrable_of_hasCompactSupport hgs
+  have h1 := norm_integral_le_of_norm_le hgi (Eventually.of_forall hpt)
+  have h2 : -(∫ y : EuclideanSpace ℝ (Fin n), ⟪GFlux S ε τ f Df (lift y 0), ed n⟫_ℝ)
+      ≤ ‖∫ y : EuclideanSpace ℝ (Fin n), ⟪GFlux S ε τ f Df (lift y 0), ed n⟫_ℝ‖ := by
+    rw [Real.norm_eq_abs]; exact neg_le_abs _
+  exact h2.trans h1
+
+/-- `q ≤ K (1 - ερ)²` away from `0`. -/
+theorem carlQ_le (S : HalfBallSolution n) (ε : ℝ) {x : Space n} (hx0 : x ≠ 0) :
+    carlQ (BR S.A) (phiR ε) x ≤ S.K * (1 - ε * ‖x‖) ^ 2 := by
+  have hρ : 0 < ‖x‖ := norm_pos_iff.2 hx0
+  have hg : ‖x‖ ^ 2 * ‖gradPhi ε x‖ ^ 2 = (1 - ε * ‖x‖) ^ 2 := by
+    have e : gradPhi ε x = (-(1 - ε * ‖x‖) / ‖x‖ ^ 2) • x := rfl
+    rw [e, norm_smul, Real.norm_eq_abs, mul_pow, sq_abs]
+    field_simp
+  have hA : ⟪S.A x (gradPhi ε x), gradPhi ε x⟫_ℝ ≤ S.K * ‖gradPhi ε x‖ ^ 2 := by
+    calc ⟪S.A x (gradPhi ε x), gradPhi ε x⟫_ℝ ≤ ‖S.A x (gradPhi ε x)‖ * ‖gradPhi ε x‖ :=
+          real_inner_le_norm _ _
+      _ ≤ (S.K * ‖gradPhi ε x‖) * ‖gradPhi ε x‖ := by
+          gcongr
+          exact ((S.A x).le_opNorm _).trans
+            (mul_le_mul_of_nonneg_right (S.coeffs.bound_A x) (norm_nonneg _))
+      _ = S.K * ‖gradPhi ε x‖ ^ 2 := by ring
+  simp only [carlQ, gradient_phiR ε hx0, BR, ContinuousLinearMap.smul_apply, real_inner_smul_left]
+  calc ‖x‖ ^ 2 * ⟪S.A x (gradPhi ε x), gradPhi ε x⟫_ℝ ≤ ‖x‖ ^ 2 * (S.K * ‖gradPhi ε x‖ ^ 2) :=
+        mul_le_mul_of_nonneg_left hA (by positivity)
+    _ = S.K * (‖x‖ ^ 2 * ‖gradPhi ε x‖ ^ 2) := by ring
+    _ = S.K * (1 - ε * ‖x‖) ^ 2 := by rw [hg]
 
 /-- **(GC4)** The pointwise inequality behind `grad_control`, from `gc_pointwise`:
 `⟪B W, W⟫ ≥ λ ρ² |W|²`, `q ≤ K` (`q = (1-ερ)² ⟪A x, x⟫/ρ²`), `|⟪B W, x/ρ⟫| ≤ K ρ |W|`,
@@ -1719,7 +2031,133 @@ theorem gc_pointwise_bound (S : HalfBallSolution n) {ε τ rs δ : ℝ} (hε : 0
           * (‖x‖ * muR n x * Real.exp (2 * τ * phiR ε x) * f x ^ 2)
         + S.lam / 2 * (‖x‖ ^ 3 * muR n x * ‖WC ε τ f Df x‖ ^ 2)
         + divergence (GFlux S ε τ f Df) x := by
-  sorry
+  have hx0 := ne_zero_of_vcoord_pos hx
+  have hρ : 0 < ‖x‖ := norm_pos_iff.2 hx0
+  have hμ := muR_nonneg x
+  have hlam : 0 < S.lam := S.coeffs.lam_pos
+  have hK : 0 ≤ S.K := le_trans (norm_nonneg _) (S.coeffs.bound_A 0)
+  have hid := gc_pointwise S (ε := ε) (τ := τ) hadm hx
+  obtain ⟨ρ, hρd⟩ : ∃ r, r = ‖x‖ := ⟨_, rfl⟩
+  obtain ⟨μ, hμd⟩ : ∃ m, m = muR n x := ⟨_, rfl⟩
+  obtain ⟨Wn, hWn⟩ : ∃ m, m = ‖WC ε τ f Df x‖ := ⟨_, rfl⟩
+  obtain ⟨w, hwd⟩ : ∃ m, m = wC ε τ f x := ⟨_, rfl⟩
+  obtain ⟨s, hsd⟩ : ∃ m, m = SpC S ε τ f x := ⟨_, rfl⟩
+  obtain ⟨q, hqd⟩ : ∃ m, m = carlQ (BR S.A) (phiR ε) x := ⟨_, rfl⟩
+  obtain ⟨Ib, hIbd⟩ : ∃ m, m = ⟪BR S.A x (WC ε τ f Df x), WC ε τ f Df x⟫_ℝ := ⟨_, rfl⟩
+  obtain ⟨Ix, hIxd⟩ : ∃ m, m = ⟪BR S.A x (WC ε τ f Df x), ‖x‖⁻¹ • x⟫_ℝ := ⟨_, rfl⟩
+  obtain ⟨Dv, hDvd⟩ : ∃ m, m = divergence (GFlux S ε τ f Df) x := ⟨_, rfl⟩
+  obtain ⟨E2, hE2d⟩ : ∃ m, m = Real.exp (2 * τ * phiR ε x) := ⟨_, rfl⟩
+  rw [← hIbd, ← hIxd, ← hDvd, ← hsd, ← hqd, ← hwd, ← hμd, ← hρd] at hid
+  rw [← hWn, ← hsd, ← hDvd, ← hE2d, ← hμd, ← hρd]
+  have hρ0 : 0 ≤ ρ := by rw [hρd]; exact hρ.le
+  have hμ0 : 0 ≤ μ := by rw [hμd]; exact hμ
+  have hWn0 : 0 ≤ Wn := by rw [hWn]; exact norm_nonneg _
+  -- `w² = e^{2τφ} f²`
+  have hw2 : w ^ 2 = E2 * f x ^ 2 := by
+    rw [hwd, hE2d, wC, mul_pow, sq, ← Real.exp_add]; ring_nf
+  -- `⟪B W, W⟫ ≥ λ ρ² |W|²`
+  have hIb : S.lam * ρ ^ 2 * Wn ^ 2 ≤ Ib := by
+    have := S.coeffs.ell x (WC ε τ f Df x)
+    rw [hIbd, hρd, hWn]
+    simp only [BR, ContinuousLinearMap.smul_apply, real_inner_smul_left]
+    nlinarith [sq_nonneg ‖x‖]
+  -- `|⟪B W, x/ρ⟫| ≤ K ρ² |W|`
+  have hIx : |Ix| ≤ S.K * ρ ^ 2 * Wn := by
+    have e : Ix = ‖x‖ ^ 2 * ‖x‖⁻¹ * ⟪S.A x (WC ε τ f Df x), x⟫_ℝ := by
+      rw [hIxd]
+      simp only [BR, ContinuousLinearMap.smul_apply, real_inner_smul_left, real_inner_smul_right]
+      ring
+    have h1 : |⟪S.A x (WC ε τ f Df x), x⟫_ℝ| ≤ S.K * ‖WC ε τ f Df x‖ * ‖x‖ :=
+      (abs_real_inner_le_norm _ _).trans (mul_le_mul_of_nonneg_right
+        (((S.A x).le_opNorm _).trans
+          (mul_le_mul_of_nonneg_right (S.coeffs.bound_A x) (norm_nonneg _))) (norm_nonneg _))
+    have h2 : 0 ≤ ‖x‖ ^ 2 * ‖x‖⁻¹ := by positivity
+    rw [e, abs_mul, abs_of_nonneg h2, hρd, hWn]
+    calc ‖x‖ ^ 2 * ‖x‖⁻¹ * |⟪S.A x (WC ε τ f Df x), x⟫_ℝ|
+        ≤ ‖x‖ ^ 2 * ‖x‖⁻¹ * (S.K * ‖WC ε τ f Df x‖ * ‖x‖) := mul_le_mul_of_nonneg_left h1 h2
+      _ = S.K * ‖x‖ ^ 2 * ‖WC ε τ f Df x‖ := by field_simp
+  -- `q w² ≤ K w²` and `ρ² w² ≤ ρ w²`
+  have hqw : q * w ^ 2 ≤ S.K * w ^ 2 := by
+    by_cases hf : f x = 0
+    · have : w = 0 := by rw [hwd, wC, hf, mul_zero]
+      rw [this]; simp
+    · have hxr : ‖x‖ ≤ rs := (hadm.supp x hf).2
+      have hερ : ε * ‖x‖ ≤ 1 / 4 := le_trans (mul_le_mul_of_nonneg_left hxr hε.le) hεrs
+      have hερ0 : 0 ≤ ε * ‖x‖ := mul_nonneg hε.le hρ.le
+      have h1 : (1 - ε * ‖x‖) ^ 2 ≤ 1 := by nlinarith
+      have h2 : q ≤ S.K := by
+        rw [hqd]
+        refine (carlQ_le S ε hx0).trans ?_
+        calc S.K * (1 - ε * ‖x‖) ^ 2 ≤ S.K * 1 := mul_le_mul_of_nonneg_left h1 hK
+          _ = S.K := mul_one _
+      exact mul_le_mul_of_nonneg_right h2 (sq_nonneg _)
+  have hρw : ρ ^ 2 * w ^ 2 ≤ ρ * w ^ 2 := by
+    by_cases hf : f x = 0
+    · have : w = 0 := by rw [hwd, wC, hf, mul_zero]
+      rw [this]; simp
+    · have hxr : ρ ≤ 1 := by rw [hρd]; exact (hadm.supp x hf).2.trans hrs1
+      have : ρ ^ 2 ≤ ρ := by
+        calc ρ ^ 2 = ρ * ρ := sq ρ
+          _ ≤ ρ * 1 := mul_le_mul_of_nonneg_left hxr hρ0
+          _ = ρ := mul_one ρ
+      exact mul_le_mul_of_nonneg_right this (sq_nonneg _)
+  -- the individual bounds
+  have p1 : S.lam * (ρ ^ 3 * μ * Wn ^ 2) ≤ ρ * μ * Ib := by
+    have h := mul_le_mul_of_nonneg_left hIb (mul_nonneg hρ0 hμ0)
+    calc S.lam * (ρ ^ 3 * μ * Wn ^ 2) = ρ * μ * (S.lam * ρ ^ 2 * Wn ^ 2) := by ring
+      _ ≤ ρ * μ * Ib := h
+  have p2 : -(s * ρ * w * μ) ≤ 1 / (2 * c) * (μ * s ^ 2) + c / 2 * (μ * (ρ ^ 2 * w ^ 2)) := by
+    have hsq : 0 ≤ 1 / (2 * c) * (s + c * (ρ * w)) ^ 2 := by positivity
+    have e : 1 / (2 * c) * (s + c * (ρ * w)) ^ 2
+        = 1 / (2 * c) * s ^ 2 + s * (ρ * w) + c / 2 * (ρ ^ 2 * w ^ 2) := by
+      field_simp; ring
+    have h3 : -(s * (ρ * w)) ≤ 1 / (2 * c) * s ^ 2 + c / 2 * (ρ ^ 2 * w ^ 2) := by
+      linarith only [hsq, e]
+    have h4 := mul_le_mul_of_nonneg_left h3 hμ0
+    calc -(s * ρ * w * μ) = μ * -(s * (ρ * w)) := by ring
+      _ ≤ μ * (1 / (2 * c) * s ^ 2 + c / 2 * (ρ ^ 2 * w ^ 2)) := h4
+      _ = 1 / (2 * c) * (μ * s ^ 2) + c / 2 * (μ * (ρ ^ 2 * w ^ 2)) := by ring
+  have p3 : 0 ≤ mR n ^ 2 * (ρ * μ * w ^ 2) := by positivity
+  have p4 : τ ^ 2 * q * ρ * w ^ 2 * μ ≤ S.K * τ ^ 2 * (ρ * μ * w ^ 2) := by
+    have h := mul_le_mul_of_nonneg_left hqw (by positivity : (0 : ℝ) ≤ τ ^ 2 * ρ * μ)
+    calc τ ^ 2 * q * ρ * w ^ 2 * μ = τ ^ 2 * ρ * μ * (q * w ^ 2) := by ring
+      _ ≤ τ ^ 2 * ρ * μ * (S.K * w ^ 2) := h
+      _ = S.K * τ ^ 2 * (ρ * μ * w ^ 2) := by ring
+  have p5 : -(μ * w * Ix)
+      ≤ S.lam / 2 * (ρ ^ 3 * μ * Wn ^ 2) + S.K ^ 2 / (2 * S.lam) * (ρ * μ * w ^ 2) := by
+    have h1 : -(w * Ix) ≤ |w| * (S.K * ρ ^ 2 * Wn) := by
+      have : -(w * Ix) ≤ |w * Ix| := neg_le_abs _
+      rw [abs_mul] at this
+      exact this.trans (mul_le_mul_of_nonneg_left hIx (abs_nonneg _))
+    have h2 : |w| * (S.K * ρ ^ 2 * Wn)
+        ≤ S.lam / 2 * (ρ ^ 3 * Wn ^ 2) + S.K ^ 2 / (2 * S.lam) * (ρ * w ^ 2) := by
+      have hsq : 0 ≤ ρ / (2 * S.lam) * (S.lam * ρ * Wn - S.K * |w|) ^ 2 := by positivity
+      have e : ρ / (2 * S.lam) * (S.lam * ρ * Wn - S.K * |w|) ^ 2
+          = S.lam / 2 * (ρ ^ 3 * Wn ^ 2) - |w| * (S.K * ρ ^ 2 * Wn)
+            + S.K ^ 2 / (2 * S.lam) * (ρ * |w| ^ 2) := by
+        field_simp; ring
+      rw [sq_abs] at e
+      linarith only [hsq, e]
+    have h3 := mul_le_mul_of_nonneg_left (h1.trans h2) hμ0
+    calc -(μ * w * Ix) = μ * -(w * Ix) := by ring
+      _ ≤ μ * (S.lam / 2 * (ρ ^ 3 * Wn ^ 2) + S.K ^ 2 / (2 * S.lam) * (ρ * w ^ 2)) :=
+          mul_le_mul_of_nonneg_left h1 hμ0 |>.trans
+            (mul_le_mul_of_nonneg_left h2 hμ0)
+      _ = S.lam / 2 * (ρ ^ 3 * μ * Wn ^ 2) + S.K ^ 2 / (2 * S.lam) * (ρ * μ * w ^ 2) := by ring
+  have hE : ρ * μ * w ^ 2 = ρ * μ * E2 * f x ^ 2 := by rw [hw2]; ring
+  have hE' : μ * (ρ ^ 2 * w ^ 2) ≤ ρ * μ * E2 * f x ^ 2 := by
+    have h := mul_le_mul_of_nonneg_left hρw hμ0
+    calc μ * (ρ ^ 2 * w ^ 2) ≤ μ * (ρ * w ^ 2) := h
+      _ = ρ * μ * w ^ 2 := by ring
+      _ = ρ * μ * E2 * f x ^ 2 := hE
+  have hc2 : c / 2 * (μ * (ρ ^ 2 * w ^ 2)) ≤ c / 2 * (ρ * μ * E2 * f x ^ 2) :=
+    mul_le_mul_of_nonneg_left hE' (by positivity)
+  have e1 : (c / 2 + S.K * τ ^ 2 + S.K ^ 2 / (2 * S.lam)) * (ρ * μ * E2 * f x ^ 2)
+      = c / 2 * (ρ * μ * E2 * f x ^ 2) + S.K * τ ^ 2 * (ρ * μ * E2 * f x ^ 2)
+        + S.K ^ 2 / (2 * S.lam) * (ρ * μ * E2 * f x ^ 2) := by ring
+  rw [hE] at p4 p5 p3 hid
+  rw [e1]
+  linarith only [hid, p1, p2, p3, p4, p5, hc2]
 
 /-- The real-number step of `grad_control`. -/
 theorem gc_algebra {lam K c τ Y X Sg D Bd : ℝ} (hlam : 0 < lam) (hc : 0 < c)
@@ -1736,6 +2174,357 @@ theorem gc_algebra {lam K c τ Y X Sg D Bd : ℝ} (hlam : 0 < lam) (hc : 0 < c)
     ring
   rw [e1, e2] at h2
   exact h2
+
+
+/-! ### Pieces of `main_lower` (all still to be proved, see the docstrings) -/
+
+/-- The integrand `carlJ`, as a function of the values `w(x) = wv` and `∇w(x) = W`
+(so `carlJ μ B φ τ w x = carlJW S ε τ (w x) (∇w x) x` by definition). -/
+noncomputable def carlJW (S : HalfBallSolution n) (ε τ wv : ℝ) (W : Space n) (x : Space n) : ℝ :=
+  muR n x * (2 * τ ^ 3 * ⟪carlV (BR S.A) (phiR ε) x, gradient (carlQ (BR S.A) (phiR ε)) x⟫_ℝ
+      * wv ^ 2
+    + 4 * τ * ⟪fderiv ℝ (carlV (BR S.A) (phiR ε)) x (BR S.A x W), W⟫_ℝ
+    - 2 * τ * ⟪fderiv ℝ (BR S.A) x (carlV (BR S.A) (phiR ε) x) W, W⟫_ℝ
+    + 2 * τ * wv * ⟪BR S.A x W, gradient (divMu (muR n) (carlV (BR S.A) (phiR ε))) x⟫_ℝ)
+
+/-- The flux `carlFlux`, written with `W` (continuous up to `t = 0`). -/
+noncomputable def CFlux (S : HalfBallSolution n) (ε τ : ℝ) (f : Space n → ℝ)
+    (Df : Space n → Space n) (y : Space n) : Space n :=
+  muR n y • ((-4 * τ * ⟪carlV (BR S.A) (phiR ε) y, WC ε τ f Df y⟫_ℝ) • BR S.A y (WC ε τ f Df y)
+    + (2 * τ * ⟪BR S.A y (WC ε τ f Df y), WC ε τ f Df y⟫_ℝ) • carlV (BR S.A) (phiR ε) y
+    - (2 * τ * divMu (muR n) (carlV (BR S.A) (phiR ε)) y * wC ε τ f y)
+        • BR S.A y (WC ε τ f Df y)
+    - (2 * τ ^ 3 * carlQ (BR S.A) (phiR ε) y * wC ε τ f y ^ 2) • carlV (BR S.A) (phiR ε) y)
+
+/-- The flux `w² μ V` of the `m²` term. -/
+noncomputable def MFlux (S : HalfBallSolution n) (ε τ : ℝ) (f : Space n → ℝ) (y : Space n) :
+    Space n :=
+  (wC ε τ f y ^ 2 * muR n y) • carlV (BR S.A) (phiR ε) y
+
+/-- **(ML1)** The pointwise identity: `F2.carleman_pointwise` (with `hsymm` from `BR_symm`,
+`C³` weights away from `0`, `C²` of `BR`) gives `2 S w T w μ = carlJ + div carlFlux`; with
+`S w = S'w + m² w`, `∇w = W` (`gradient_wC`, the fluxes agree near `x`), and
+`w T w μ = -τ div(w² μ V)` (product rule: `div(w² μ V) = w² div(μ V) + 2 w μ ⟪∇w, V⟫`). -/
+theorem ml_pointwise (S : HalfBallSolution n) {ε τ rs δ : ℝ} {f : Space n → ℝ}
+    {Df : Space n → Space n} (hadm : Admissible rs δ f Df) {x : Space n} (hx : 0 < vcoord x) :
+    muR n x * (SpC S ε τ f x + TWC S ε τ f Df x) ^ 2
+      = muR n x * SpC S ε τ f x ^ 2 + muR n x * TWC S ε τ f Df x ^ 2
+        + carlJW S ε τ (wC ε τ f x) (WC ε τ f Df x) x
+        + divergence (CFlux S ε τ f Df) x
+        + 2 * mR n ^ 2 * τ * divergence (MFlux S ε τ f) x := by
+  have hx0 := ne_zero_of_vcoord_pos hx
+  have hU : {x : Space n | 0 < vcoord x} ∈ 𝓝 x :=
+    (isOpen_lt continuous_const F1.continuous_vcoord).mem_nhds hx
+  have hw2 := contDiffAt_wC (ε := ε) (τ := τ) hadm hx
+  -- `2 S w T w μ = carlJ + div carlFlux`
+  have key := MazyaRefinedCauchy.carleman_pointwise (muR n) (BR S.A) (phiR ε) τ (wC ε τ f) x
+    (contDiffAt_muR hx0) (muR_ne_zero hx0) (contDiff_BR S).contDiffAt (BR_symm S)
+    (contDiffAt_phiR ε hx0) hw2
+  have hev : carlFlux (muR n) (BR S.A) (phiR ε) τ (wC ε τ f) =ᶠ[𝓝 x] CFlux S ε τ f Df := by
+    filter_upwards [hU] with y hy
+    simp only [carlFlux, CFlux, gradient_wC hadm hy]
+  rw [F2.divergence_congr hev] at key
+  have hJ : carlJ (muR n) (BR S.A) (phiR ε) τ (wC ε τ f) x
+      = carlJW S ε τ (wC ε τ f x) (WC ε τ f Df x) x := by
+    simp only [carlJ, carlJW, gradient_wC hadm hx]
+  rw [hJ, carlT_eq S hadm hx] at key
+  -- `w T w μ = -τ div(w² μ V)`
+  have hM : divergence (MFlux S ε τ f) x
+      = wC ε τ f x ^ 2 * (muR n x * divMu (muR n) (carlV (BR S.A) (phiR ε)) x)
+        + 2 * wC ε τ f x * muR n x * ⟪WC ε τ f Df x, carlV (BR S.A) (phiR ε) x⟫_ℝ := by
+    have e : MFlux S ε τ f
+        = fun y => wC ε τ f y ^ 2 • (muR n y • carlV (BR S.A) (phiR ε) y) := by
+      funext y
+      simp only [MFlux, smul_smul]
+    have hwd : DifferentiableAt ℝ (fun y => wC ε τ f y ^ 2) x :=
+      (hw2.differentiableAt (by norm_num)).pow 2
+    have hVd : DifferentiableAt ℝ (fun y => muR n y • carlV (BR S.A) (phiR ε) y) x :=
+      ((contDiffAt_muR hx0 (k := 1)).differentiableAt one_ne_zero).smul
+        ((contDiffAt_carlV S ε hx0).differentiableAt one_ne_zero)
+    rw [e, F2.divergence_smul hwd hVd, F2.mul_divMu (muR_ne_zero hx0)]
+    have hfd : fderiv ℝ (fun y => wC ε τ f y ^ 2) x
+        = (2 * wC ε τ f x) • fderiv ℝ (wC ε τ f) x := by
+      have h := ((hw2.differentiableAt (by norm_num)).hasFDerivAt.pow 2).fderiv
+      rw [h]
+      ext v
+      simp only [ContinuousLinearMap.smul_apply, smul_eq_mul]
+      push_cast
+      ring
+    rw [hfd]
+    simp only [ContinuousLinearMap.smul_apply, smul_eq_mul, map_smul]
+    rw [← inner_gradient_left, gradient_wC hadm hx]
+    ring
+  have hT : TWC S ε τ f Df x = -2 * τ * ⟪carlV (BR S.A) (phiR ε) x, WC ε τ f Df x⟫_ℝ
+      - τ * divMu (muR n) (carlV (BR S.A) (phiR ε)) x * wC ε τ f x := rfl
+  have hS : carlS (muR n) (BR S.A) (phiR ε) τ (wC ε τ f) x
+      = SpC S ε τ f x + mR n ^ 2 * wC ε τ f x := by
+    simp only [SpC]; ring
+  rw [hS] at key
+  rw [hM, real_inner_comm (carlV (BR S.A) (phiR ε) x) (WC ε τ f Df x)]
+  have e2 : muR n x * (SpC S ε τ f x + TWC S ε τ f Df x) ^ 2
+      = muR n x * SpC S ε τ f x ^ 2 + muR n x * TWC S ε τ f Df x ^ 2
+        + 2 * (SpC S ε τ f x + mR n ^ 2 * wC ε τ f x) * TWC S ε τ f Df x * muR n x
+        - 2 * mR n ^ 2 * wC ε τ f x * TWC S ε τ f Df x * muR n x := by ring
+  rw [e2, key, hT]
+  ring
+
+/-- **(ML4)** The pointwise lower bound of `carlJ` (steps (a) of the note, in `x` coordinates,
+for `0 < ρ ≤ rs`, `ε ρ ≤ 1/4`, `K ρ ≤ 1/4`, `|A x - I| ≤ K ρ`):
+`⟪V, ∇q⟫ ≥ ρ ((81/128) ε - 5 K²)` where `V = -(1-ερ) A x`, `q = (1-ερ)² ⟪A x, x⟫/ρ²`;
+`4 ⟪DV (B W), W⟫ - 2 ⟪(DB V) W, W⟫ ≥ -14 K² ρ³ |W|²` (independent of `ε`);
+`|2 τ w ⟪B W, ∇ div_μ V⟫| ≤ 2 τ ρ³ |W|² + (K² C_h² / 2) τ ρ w²` where
+`C_h = sup_{0 < ρ ≤ rs} |∇ div_μ V|` (finite: uses `bound_dA`, `bound_d2A`). -/
+theorem ml_J_lower (S : HalfBallSolution n) {ε rs : ℝ} (hε : 0 < ε) (hrs : 0 < rs)
+    (hrsR : rs < S.R) (hrs1 : rs ≤ 1) (hεrs : ε * rs ≤ 1 / 4) (hKrs : (S.K + 1) * rs ≤ 1 / 4) :
+    ∃ C' : ℝ, 0 ≤ C' ∧ ∀ τ : ℝ, 1 ≤ τ → ∀ x : Space n, x ≠ 0 → ‖x‖ ≤ rs →
+      ∀ (wv : ℝ) (W : Space n),
+        muR n x * (2 * ((81 / 128) * ε - 5 * S.K ^ 2) * τ ^ 3 * (‖x‖ * wv ^ 2)
+          - 2 * (16 * S.K ^ 2 + 1) * τ * (‖x‖ ^ 3 * ‖W‖ ^ 2) - C' * τ * (‖x‖ * wv ^ 2))
+        ≤ carlJW S ε τ wv W x := by
+  sorry
+
+/-! ### Regularity of the Carleman fields away from `0` (for `ml_div_integrable`) -/
+
+/-- `V` is `C²` away from `0`. -/
+theorem contDiffAt_carlV2 (S : HalfBallSolution n) (ε : ℝ) {x : Space n} (hx0 : x ≠ 0) :
+    ContDiffAt ℝ 2 (carlV (BR S.A) (phiR ε)) x :=
+  (contDiff_BR S).contDiffAt.clm_apply
+    (F2.contDiffAt_gradient (m := 2) (contDiffAt_phiR ε hx0 (k := 3)) (by norm_num))
+
+/-- `q` is `C²` away from `0`. -/
+theorem contDiffAt_carlQ (S : HalfBallSolution n) (ε : ℝ) {x : Space n} (hx0 : x ≠ 0) :
+    ContDiffAt ℝ 2 (carlQ (BR S.A) (phiR ε)) x := by
+  have hg := F2.contDiffAt_gradient (m := 2) (contDiffAt_phiR ε hx0 (k := 3)) (by norm_num)
+  exact ((contDiff_BR S).contDiffAt.clm_apply hg).inner ℝ hg
+
+/-- `div_μ V` is `C¹` away from `0`. -/
+theorem contDiffAt_divMuV (S : HalfBallSolution n) (ε : ℝ) {x : Space n} (hx0 : x ≠ 0) :
+    ContDiffAt ℝ 1 (divMu (muR n) (carlV (BR S.A) (phiR ε))) x := by
+  have hG : ContDiffAt ℝ 2 (fun y => muR n y • carlV (BR S.A) (phiR ε) y) x :=
+    (contDiffAt_muR hx0).smul (contDiffAt_carlV2 S ε hx0)
+  have hd : ContDiffAt ℝ 1
+      (fun y => divergence (fun y => muR n y • carlV (BR S.A) (phiR ε) y) y) x :=
+    (F2.traceCLM (n := n)).contDiff.contDiffAt.comp x (hG.fderiv_right (m := 1) (by norm_num))
+  exact ((contDiffAt_muR hx0).inv (muR_ne_zero hx0)).mul hd
+
+/-- `div(w² μ V) = w² μ div_μ V + 2 w μ ⟪W, V⟫` in the open half-space. -/
+theorem div_MFlux_eq (S : HalfBallSolution n) {ε τ rs δ : ℝ} {f : Space n → ℝ}
+    {Df : Space n → Space n} (hadm : Admissible rs δ f Df) {x : Space n} (hx : 0 < vcoord x) :
+    divergence (MFlux S ε τ f) x
+      = wC ε τ f x ^ 2 * (muR n x * divMu (muR n) (carlV (BR S.A) (phiR ε)) x)
+        + 2 * wC ε τ f x * muR n x * ⟪WC ε τ f Df x, carlV (BR S.A) (phiR ε) x⟫_ℝ := by
+  have hx0 := ne_zero_of_vcoord_pos hx
+  have hw2 := contDiffAt_wC (ε := ε) (τ := τ) hadm hx
+  have e : MFlux S ε τ f
+      = fun y => wC ε τ f y ^ 2 • (muR n y • carlV (BR S.A) (phiR ε) y) := by
+    funext y
+    simp only [MFlux, smul_smul]
+  have hwd : DifferentiableAt ℝ (fun y => wC ε τ f y ^ 2) x :=
+    (hw2.differentiableAt (by norm_num)).pow 2
+  have hVd : DifferentiableAt ℝ (fun y => muR n y • carlV (BR S.A) (phiR ε) y) x :=
+    ((contDiffAt_muR hx0 (k := 1)).differentiableAt one_ne_zero).smul
+      ((contDiffAt_carlV S ε hx0).differentiableAt one_ne_zero)
+  rw [e, F2.divergence_smul hwd hVd, F2.mul_divMu (muR_ne_zero hx0)]
+  have hfd : fderiv ℝ (fun y => wC ε τ f y ^ 2) x
+      = (2 * wC ε τ f x) • fderiv ℝ (wC ε τ f) x := by
+    have h := ((hw2.differentiableAt (by norm_num)).hasFDerivAt.pow 2).fderiv
+    rw [h]
+    ext v
+    simp only [ContinuousLinearMap.smul_apply, smul_eq_mul]
+    push_cast
+    ring
+  rw [hfd]
+  simp only [ContinuousLinearMap.smul_apply, smul_eq_mul, map_smul]
+  rw [← inner_gradient_left, gradient_wC hadm hx]
+  ring
+
+/-- `μ (T w)²` is integrable on the open half-space. -/
+theorem integrableOn_TWC_sq (S : HalfBallSolution n) {ε τ rs δ : ℝ} {f : Space n → ℝ}
+    {Df : Space n → Space n} (hadm : Admissible rs δ f Df) :
+    IntegrableOn (fun x => muR n x * TWC S ε τ f Df x ^ 2) {x | 0 < vcoord x} := by
+  refine integrableOn_of_annulus (rs := rs) hadm.pos (fun x hx => ?_) fun x hx hx0 => ?_
+  · have : TWC S ε τ f Df x ≠ 0 := by
+      intro h; apply hx; simp [h]
+    exact TWC_supp S hadm x this
+  · exact (continuousAt_muR hx0).continuousWithinAt.mul
+      ((continuousWithinAt_TWC S hadm hx hx0).pow 2)
+
+/-- The integrand `carlJ` (with `w`, `∇w` replaced by `wC`, `WC`) is continuous up to `t = 0`
+away from `0`. -/
+theorem continuousWithinAt_carlJW (S : HalfBallSolution n) {ε τ rs δ : ℝ} {f : Space n → ℝ}
+    {Df : Space n → Space n} (hadm : Admissible rs δ f Df) {x : Space n} (hx : 0 ≤ vcoord x)
+    (hx0 : x ≠ 0) :
+    ContinuousWithinAt (fun y => carlJW S ε τ (wC ε τ f y) (WC ε τ f Df y) y)
+      {x | 0 ≤ vcoord x} x := by
+  have hw := continuousWithinAt_wC (ε := ε) (τ := τ) hadm hx hx0
+  have hW := continuousWithinAt_WC (ε := ε) (τ := τ) hadm hx hx0
+  have hμ := (continuousAt_muR hx0).continuousWithinAt (s := {x : Space n | 0 ≤ vcoord x})
+  have hV := (contDiffAt_carlV S ε hx0).continuousAt.continuousWithinAt
+    (s := {x : Space n | 0 ≤ vcoord x})
+  have hgq : ContinuousWithinAt (gradient (carlQ (BR S.A) (phiR ε))) {x | 0 ≤ vcoord x} x :=
+    (F2.contDiffAt_gradient (m := 0) (contDiffAt_carlQ S ε hx0)
+      (by norm_num)).continuousAt.continuousWithinAt
+  have hDV : ContinuousWithinAt (fderiv ℝ (carlV (BR S.A) (phiR ε))) {x | 0 ≤ vcoord x} x :=
+    ((contDiffAt_carlV S ε hx0).fderiv_right (m := 0) (by norm_num)).continuousAt.continuousWithinAt
+  have hDB : ContinuousWithinAt (fderiv ℝ (BR S.A)) {x | 0 ≤ vcoord x} x :=
+    ((contDiff_BR S).continuous_fderiv (by norm_num)).continuousAt.continuousWithinAt
+  have hB : ContinuousWithinAt (BR S.A) {x | 0 ≤ vcoord x} x :=
+    (contDiff_BR S).continuous.continuousAt.continuousWithinAt
+  have hgh : ContinuousWithinAt (gradient (divMu (muR n) (carlV (BR S.A) (phiR ε))))
+      {x | 0 ≤ vcoord x} x :=
+    (F2.contDiffAt_gradient (m := 0) (contDiffAt_divMuV S ε hx0)
+      (by norm_num)).continuousAt.continuousWithinAt
+  have hBW := hB.clm_apply hW
+  unfold carlJW
+  exact hμ.mul (((((continuousWithinAt_const.mul (hV.inner hgq)).mul (hw.pow 2)).add
+    (continuousWithinAt_const.mul ((hDV.clm_apply hBW).inner hW))).sub
+    (continuousWithinAt_const.mul (((hDB.clm_apply hV).clm_apply hW).inner hW))).add
+    ((continuousWithinAt_const.mul hw).mul (hBW.inner hgh)))
+
+/-- `carlJ` (with `wC`, `WC`) is integrable on the open half-space. -/
+theorem integrableOn_carlJW (S : HalfBallSolution n) {ε τ rs δ : ℝ} {f : Space n → ℝ}
+    {Df : Space n → Space n} (hadm : Admissible rs δ f Df) :
+    IntegrableOn (fun x => carlJW S ε τ (wC ε τ f x) (WC ε τ f Df x) x) {x | 0 < vcoord x} := by
+  refine integrableOn_of_annulus (rs := rs) hadm.pos (fun x hx => ?_)
+    fun x hx hx0 => continuousWithinAt_carlJW S hadm hx hx0
+  by_cases hw : wC ε τ f x = 0
+  · by_cases hW : WC ε τ f Df x = 0
+    · exfalso; apply hx; simp [carlJW, hw, hW]
+    · exact WC_supp hadm x hW
+  · exact wC_supp hadm x hw
+
+/-- **(ML2)** Integrability of the two divergences on `{t > 0}` (by `ml_pointwise` the
+divergence of `CFlux` is a sum of integrable terms; `div MFlux = μ (w² div_μ V + 2 w ⟪W, V⟫)`
+is continuous with compact support away from `0`). -/
+theorem ml_div_integrable (S : HalfBallSolution n) {ε τ rs δ : ℝ} {f : Space n → ℝ}
+    {Df : Space n → Space n} (hadm : Admissible rs δ f Df) (hrsR : rs < S.R)
+    (hPi : IntegrableOn (fun x => muR n x * Real.exp (2 * τ * phiR ε x) * P0R S.A f x ^ 2)
+      {x | 0 < vcoord x}) :
+    IntegrableOn (divergence (CFlux S ε τ f Df)) {x | 0 < vcoord x} ∧
+      IntegrableOn (divergence (MFlux S ε τ f)) {x | 0 < vcoord x} := by
+  have hΩm : MeasurableSet {x : Space n | 0 < vcoord x} := F1.measurableSet_halfSpace 0
+  -- `div MFlux`
+  have hMi : IntegrableOn (divergence (MFlux S ε τ f)) {x | 0 < vcoord x} := by
+    have hg : IntegrableOn (fun x =>
+        wC ε τ f x ^ 2 * (muR n x * divMu (muR n) (carlV (BR S.A) (phiR ε)) x)
+          + 2 * wC ε τ f x * muR n x * ⟪WC ε τ f Df x, carlV (BR S.A) (phiR ε) x⟫_ℝ)
+        {x | 0 < vcoord x} := by
+      refine integrableOn_of_annulus (rs := rs) hadm.pos (fun x hx => wC_supp (ε := ε) (τ := τ) hadm x ?_)
+        fun x hx hx0 => ?_
+      · intro h; apply hx; simp [h]
+      · have hw := continuousWithinAt_wC (ε := ε) (τ := τ) hadm hx hx0
+        have hW := continuousWithinAt_WC (ε := ε) (τ := τ) hadm hx hx0
+        have hμ := (continuousAt_muR hx0).continuousWithinAt (s := {x : Space n | 0 ≤ vcoord x})
+        have hV := (contDiffAt_carlV S ε hx0).continuousAt.continuousWithinAt
+          (s := {x : Space n | 0 ≤ vcoord x})
+        have hh := (continuousAt_divMuV S ε hx0).continuousWithinAt
+          (s := {x : Space n | 0 ≤ vcoord x})
+        exact ((hw.pow 2).mul (hμ.mul hh)).add
+          (((continuousWithinAt_const.mul hw).mul hμ).mul (hW.inner hV))
+    exact hg.congr_fun (fun x hx => (div_MFlux_eq S hadm hx).symm) hΩm
+  refine ⟨?_, hMi⟩
+  -- `div CFlux`, from `ml_pointwise`
+  have hSi := integrableOn_SpC_sq S hadm hPi
+  have hTi := integrableOn_TWC_sq (ε := ε) (τ := τ) S hadm
+  have hJi := integrableOn_carlJW (ε := ε) (τ := τ) S hadm
+  have hsum : IntegrableOn (fun x => muR n x * Real.exp (2 * τ * phiR ε x) * P0R S.A f x ^ 2
+      - muR n x * SpC S ε τ f x ^ 2 - muR n x * TWC S ε τ f Df x ^ 2
+      - carlJW S ε τ (wC ε τ f x) (WC ε τ f Df x) x
+      - 2 * mR n ^ 2 * τ * divergence (MFlux S ε τ f) x) {x | 0 < vcoord x} :=
+    (((hPi.sub hSi).sub hTi).sub hJi).sub (hMi.const_mul _)
+  refine hsum.congr_fun (fun x hx => ?_) hΩm
+  have hid := ml_pointwise S (ε := ε) (τ := τ) hadm hx
+  have hconj : Real.exp (τ * phiR ε x) * P0R S.A f x = SpC S ε τ f x + TWC S ε τ f Df x := by
+    rw [conj_eq S ε τ hadm hx, carlT_eq S hadm hx]
+  have hE2 : Real.exp (2 * τ * phiR ε x) = Real.exp (τ * phiR ε x) ^ 2 := by
+    rw [sq, ← Real.exp_add]; ring_nf
+  have hP : muR n x * Real.exp (2 * τ * phiR ε x) * P0R S.A f x ^ 2
+      = muR n x * (SpC S ε τ f x + TWC S ε τ f Df x) ^ 2 := by
+    rw [← hconj, hE2]; ring
+  simp only
+  rw [hP, hid]
+  ring
+
+/-- **(ML3, `m²` part)** `∫ div(w² μ V) = 0`: the boundary integrand `w² μ ⟪V, e_d⟫` vanishes
+on `t = 0` (`inner_carlV_ed`). -/
+theorem ml_boundaryM (S : HalfBallSolution n) {ε τ rs δ : ℝ} {f : Space n → ℝ}
+    {Df : Space n → Space n} (hadm : Admissible rs δ f Df) (hrsR : rs < S.R)
+    (hPi : IntegrableOn (fun x => muR n x * Real.exp (2 * τ * phiR ε x) * P0R S.A f x ^ 2)
+      {x | 0 < vcoord x}) :
+    ∫ x in {x : Space n | 0 < vcoord x}, divergence (MFlux S ε τ f) x = 0 := by
+  have hf0 : ∀ y : Space n, ‖y‖ < δ → f y = 0 := fun y hy => by
+    by_contra h
+    have := (hadm.supp y h).1
+    linarith
+  have hf0' : ∀ y : Space n, rs < ‖y‖ → f y = 0 := fun y hy => by
+    by_contra h
+    have := (hadm.supp y h).2
+    linarith
+  have e : MFlux S ε τ f = fun y => (wC ε τ f y ^ 2 * muR n y) • carlV (BR S.A) (phiR ε) y := rfl
+  have hC1 : ∀ x, 0 < vcoord x → ContDiffAt ℝ 1 (MFlux S ε τ f) x := by
+    intro x hx
+    have hx0 := ne_zero_of_vcoord_pos hx
+    rw [e]
+    exact ((((contDiffAt_wC (ε := ε) (τ := τ) hadm hx).of_le (by norm_num)).pow 2).mul
+      (contDiffAt_muR hx0)).smul (contDiffAt_carlV S ε hx0)
+  have hcont : ContinuousOn (MFlux S ε τ f) {x | 0 ≤ vcoord x} := by
+    intro x hx
+    by_cases hx0 : x = 0
+    · have hev : MFlux S ε τ f =ᶠ[𝓝 x] fun _ => 0 := by
+        filter_upwards [Metric.ball_mem_nhds x hadm.pos] with y hy
+        rw [Metric.mem_ball, hx0, dist_zero_right] at hy
+        simp [MFlux, wC, hf0 y hy]
+      exact (continuousAt_const.congr hev.symm).continuousWithinAt
+    · rw [e]
+      exact (((continuousWithinAt_wC hadm hx hx0).pow 2).mul
+        (continuousAt_muR hx0).continuousWithinAt).smul
+        (contDiffAt_carlV S ε hx0).continuousAt.continuousWithinAt
+  have hsupp : HasCompactSupport (MFlux S ε τ f) := by
+    refine HasCompactSupport.intro (isCompact_closedBall (0 : Space n) rs) fun y hy => ?_
+    rw [Metric.mem_closedBall, dist_zero_right, not_le] at hy
+    simp [MFlux, wC, hf0' y hy]
+  have hIBP := integral_divergence_halfSpace_of_continuousOn (MFlux S ε τ f) hC1 hcont hsupp
+    (ml_div_integrable S hadm hrsR hPi).2
+  rw [hIBP]
+  have h0 : ∀ y : EuclideanSpace ℝ (Fin n), ⟪MFlux S ε τ f (lift y 0), ed n⟫_ℝ = 0 := by
+    intro y
+    by_cases hfx : f (lift y 0) = 0
+    · simp [MFlux, wC, hfx]
+    · obtain ⟨hδx, hxr⟩ := hadm.supp _ hfx
+      have hx0 : lift y 0 ≠ 0 := by
+        intro h; rw [h, norm_zero] at hδx; linarith [hadm.pos]
+      have hxf : lift y 0 ∈ flatPiece n S.R := ⟨by linarith, by rw [vcoord_lift]⟩
+      simp only [MFlux, real_inner_smul_left, inner_carlV_ed S ε hx0 hxf, mul_zero]
+  simp [h0]
+
+/-- **(ML3, `carlFlux` part)** The boundary term of `carlFlux` (as in `gc_boundary`, with
+`F1.integral_divergence_halfSpace_of_continuousOn`):
+`⟪CFlux, e_d⟫ = μ ⟪B W, e_d⟫ (-4τ ⟪V, W⟫ - 2τ (div_μ V) w)` on `t = 0` (`inner_carlV_ed`
+kills the `V`-terms), with `⟪B W, e_d⟫ = ρ² e^{τφ} ⟪A Df, e_d⟫` (`inner_BR_WC_ed`),
+`|V| ≤ K ρ`, `ρ |W| ≤ e^{τφ} (ρ |Df| + τ |f|)` and `|div_μ V| ≤ C_h0` on `0 < ρ ≤ rs`. -/
+theorem ml_boundaryC (S : HalfBallSolution n) {ε rs : ℝ} (hε : 0 < ε) (hrs : 0 < rs)
+    (hrsR : rs < S.R) (hrs1 : rs ≤ 1) (hεrs : ε * rs ≤ 1 / 4) (hKrs : (S.K + 1) * rs ≤ 1 / 4) :
+    ∃ CB : ℝ, 0 ≤ CB ∧ ∀ τ : ℝ, 1 ≤ τ → ∀ (f : Space n → ℝ) (Df : Space n → Space n) (δ : ℝ),
+      Admissible rs δ f Df →
+      IntegrableOn (fun x => muR n x * Real.exp (2 * τ * phiR ε x) * P0R S.A f x ^ 2)
+        {x | 0 < vcoord x} →
+      -(CB * τ ^ 2 * IBd S ε τ f Df)
+          ≤ ∫ x in {x : Space n | 0 < vcoord x}, divergence (CFlux S ε τ f Df) x := by
+  sorry
+
+/-- **(ML3)** The boundary terms. -/
+theorem ml_boundary (S : HalfBallSolution n) {ε rs : ℝ} (hε : 0 < ε) (hrs : 0 < rs)
+    (hrsR : rs < S.R) (hrs1 : rs ≤ 1) (hεrs : ε * rs ≤ 1 / 4) (hKrs : (S.K + 1) * rs ≤ 1 / 4) :
+    ∃ CB : ℝ, 0 ≤ CB ∧ ∀ τ : ℝ, 1 ≤ τ → ∀ (f : Space n → ℝ) (Df : Space n → Space n) (δ : ℝ),
+      Admissible rs δ f Df →
+      IntegrableOn (fun x => muR n x * Real.exp (2 * τ * phiR ε x) * P0R S.A f x ^ 2)
+        {x | 0 < vcoord x} →
+      -(CB * τ ^ 2 * IBd S ε τ f Df)
+          ≤ ∫ x in {x : Space n | 0 < vcoord x}, divergence (CFlux S ε τ f Df) x ∧
+        ∫ x in {x : Space n | 0 < vcoord x}, divergence (MFlux S ε τ f) x = 0 := by
+  obtain ⟨CB, hCB, h⟩ := ml_boundaryC S hε hrs hrsR hrs1 hεrs hKrs
+  exact ⟨CB, hCB, fun τ hτ f Df δ hadm hPi =>
+    ⟨h τ hτ f Df δ hadm hPi, ml_boundaryM S hadm hrsR hPi⟩⟩
 
 /-! ### The three integrated inequalities -/
 
@@ -1947,7 +2736,104 @@ theorem main_lower (S : HalfBallSolution n) (hn : 0 < n) {ε rs : ℝ} (hε : 0 
           - 2 * (16 * S.K ^ 2 + 1) * τ * IY ε τ f Df - C' * τ * IX ε τ f
           - CB * τ ^ 2 * IBd S ε τ f Df
         ≤ IPP S ε τ f := by
-  sorry
+  obtain ⟨C', hC'0, hJ⟩ := ml_J_lower S hε hrs hrsR hrs1 hεrs hKrs
+  obtain ⟨CB, hCB0, hBdry⟩ := ml_boundary S hε hrs hrsR hrs1 hεrs hKrs
+  refine ⟨C', CB, hC'0, hCB0, fun τ hτ f Df δ hadm hPi => ?_⟩
+  have hΩm : MeasurableSet {x : Space n | 0 < vcoord x} := F1.measurableSet_halfSpace 0
+  obtain ⟨hCi, hMi⟩ := ml_div_integrable S hadm hrsR hPi
+  obtain ⟨hbC, hbM⟩ := hBdry τ hτ f Df δ hadm hPi
+  have hSi := integrableOn_SpC_sq S hadm hPi
+  have hXi := integrableOn_X (ε := ε) (τ := τ) hadm
+  have hYi := integrableOn_Y (ε := ε) (τ := τ) hadm
+  obtain ⟨a, had⟩ : ∃ a : ℝ, a = 2 * ((81 / 128) * ε - 5 * S.K ^ 2) := ⟨_, rfl⟩
+  obtain ⟨cY, hcY⟩ : ∃ c : ℝ, c = 2 * (16 * S.K ^ 2 + 1) := ⟨_, rfl⟩
+  rw [← had, ← hcY]
+  -- the pointwise inequality
+  have hpt : ∀ x ∈ {x : Space n | 0 < vcoord x},
+      muR n x * SpC S ε τ f x ^ 2
+        + a * τ ^ 3 * (‖x‖ * muR n x * Real.exp (2 * τ * phiR ε x) * f x ^ 2)
+        - cY * τ * (‖x‖ ^ 3 * muR n x * ‖WC ε τ f Df x‖ ^ 2)
+        - C' * τ * (‖x‖ * muR n x * Real.exp (2 * τ * phiR ε x) * f x ^ 2)
+        + divergence (CFlux S ε τ f Df) x
+        + 2 * mR n ^ 2 * τ * divergence (MFlux S ε τ f) x
+      ≤ muR n x * Real.exp (2 * τ * phiR ε x) * P0R S.A f x ^ 2 := by
+    intro x hx
+    have hx0 := ne_zero_of_vcoord_pos hx
+    have hμ := muR_nonneg x
+    have hconj : Real.exp (τ * phiR ε x) * P0R S.A f x = SpC S ε τ f x + TWC S ε τ f Df x := by
+      rw [conj_eq S ε τ hadm hx, carlT_eq S hadm hx]
+    have hE2 : Real.exp (2 * τ * phiR ε x) = Real.exp (τ * phiR ε x) ^ 2 := by
+      rw [sq, ← Real.exp_add]; ring_nf
+    have hP : muR n x * Real.exp (2 * τ * phiR ε x) * P0R S.A f x ^ 2
+        = muR n x * (SpC S ε τ f x + TWC S ε τ f Df x) ^ 2 := by
+      rw [← hconj, hE2]; ring
+    have hw2 : wC ε τ f x ^ 2 = Real.exp (2 * τ * phiR ε x) * f x ^ 2 := by
+      rw [hE2, wC, mul_pow]
+    have hid := ml_pointwise S (ε := ε) (τ := τ) hadm hx
+    have hJx : muR n x * (a * τ ^ 3 * (‖x‖ * wC ε τ f x ^ 2)
+          - cY * τ * (‖x‖ ^ 3 * ‖WC ε τ f Df x‖ ^ 2) - C' * τ * (‖x‖ * wC ε τ f x ^ 2))
+        ≤ carlJW S ε τ (wC ε τ f x) (WC ε τ f Df x) x := by
+      by_cases hxr : ‖x‖ ≤ rs
+      · have := hJ τ hτ x hx0 hxr (wC ε τ f x) (WC ε τ f Df x)
+        rw [had, hcY]
+        exact this
+      · push Not at hxr
+        have hf0 : f x = 0 := by
+          by_contra h; have := (hadm.supp x h).2; linarith
+        have hD0 : Df x = 0 := by
+          by_contra h; have := (hadm.Dsupp x h).2; linarith
+        have hw0 : wC ε τ f x = 0 := by simp [wC, hf0]
+        have hW0 : WC ε τ f Df x = 0 := by simp [WC, hf0, hD0]
+        rw [hw0, hW0]
+        simp [carlJW]
+    have hT : 0 ≤ muR n x * TWC S ε τ f Df x ^ 2 := by positivity
+    have e1 : muR n x * (a * τ ^ 3 * (‖x‖ * wC ε τ f x ^ 2)
+          - cY * τ * (‖x‖ ^ 3 * ‖WC ε τ f Df x‖ ^ 2) - C' * τ * (‖x‖ * wC ε τ f x ^ 2))
+        = a * τ ^ 3 * (‖x‖ * muR n x * Real.exp (2 * τ * phiR ε x) * f x ^ 2)
+          - cY * τ * (‖x‖ ^ 3 * muR n x * ‖WC ε τ f Df x‖ ^ 2)
+          - C' * τ * (‖x‖ * muR n x * Real.exp (2 * τ * phiR ε x) * f x ^ 2) := by
+      rw [hw2]; ring
+    rw [hP]
+    linarith only [hid, hJx, hT, e1]
+  -- integrate
+  have i1 : IntegrableOn (fun x => a * τ ^ 3 *
+      (‖x‖ * muR n x * Real.exp (2 * τ * phiR ε x) * f x ^ 2)) {x | 0 < vcoord x} :=
+    hXi.const_mul _
+  have i2 : IntegrableOn (fun x => cY * τ * (‖x‖ ^ 3 * muR n x * ‖WC ε τ f Df x‖ ^ 2))
+      {x | 0 < vcoord x} := hYi.const_mul _
+  have i3 : IntegrableOn (fun x => C' * τ *
+      (‖x‖ * muR n x * Real.exp (2 * τ * phiR ε x) * f x ^ 2)) {x | 0 < vcoord x} :=
+    hXi.const_mul _
+  have i5 : IntegrableOn (fun x => 2 * mR n ^ 2 * τ * divergence (MFlux S ε τ f) x)
+      {x | 0 < vcoord x} := hMi.const_mul _
+  have j1 : IntegrableOn (fun x => muR n x * SpC S ε τ f x ^ 2
+      + a * τ ^ 3 * (‖x‖ * muR n x * Real.exp (2 * τ * phiR ε x) * f x ^ 2))
+      {x | 0 < vcoord x} := hSi.add i1
+  have j2 : IntegrableOn (fun x => muR n x * SpC S ε τ f x ^ 2
+      + a * τ ^ 3 * (‖x‖ * muR n x * Real.exp (2 * τ * phiR ε x) * f x ^ 2)
+      - cY * τ * (‖x‖ ^ 3 * muR n x * ‖WC ε τ f Df x‖ ^ 2)) {x | 0 < vcoord x} := j1.sub i2
+  have j3 : IntegrableOn (fun x => muR n x * SpC S ε τ f x ^ 2
+      + a * τ ^ 3 * (‖x‖ * muR n x * Real.exp (2 * τ * phiR ε x) * f x ^ 2)
+      - cY * τ * (‖x‖ ^ 3 * muR n x * ‖WC ε τ f Df x‖ ^ 2)
+      - C' * τ * (‖x‖ * muR n x * Real.exp (2 * τ * phiR ε x) * f x ^ 2))
+      {x | 0 < vcoord x} := j2.sub i3
+  have j4 : IntegrableOn (fun x => muR n x * SpC S ε τ f x ^ 2
+      + a * τ ^ 3 * (‖x‖ * muR n x * Real.exp (2 * τ * phiR ε x) * f x ^ 2)
+      - cY * τ * (‖x‖ ^ 3 * muR n x * ‖WC ε τ f Df x‖ ^ 2)
+      - C' * τ * (‖x‖ * muR n x * Real.exp (2 * τ * phiR ε x) * f x ^ 2)
+      + divergence (CFlux S ε τ f Df) x) {x | 0 < vcoord x} := j3.add hCi
+  have j5 : IntegrableOn (fun x => muR n x * SpC S ε τ f x ^ 2
+      + a * τ ^ 3 * (‖x‖ * muR n x * Real.exp (2 * τ * phiR ε x) * f x ^ 2)
+      - cY * τ * (‖x‖ ^ 3 * muR n x * ‖WC ε τ f Df x‖ ^ 2)
+      - C' * τ * (‖x‖ * muR n x * Real.exp (2 * τ * phiR ε x) * f x ^ 2)
+      + divergence (CFlux S ε τ f Df) x
+      + 2 * mR n ^ 2 * τ * divergence (MFlux S ε τ f) x) {x | 0 < vcoord x} := j4.add i5
+  have hmono := setIntegral_mono_on j5 hPi hΩm hpt
+  rw [integral_add j4 i5, integral_add j3 hCi, integral_sub j2 i3, integral_sub j1 i2,
+    integral_add hSi i1, integral_const_mul, integral_const_mul, integral_const_mul,
+    integral_const_mul, hbM] at hmono
+  simp only [ISg, IX, IY, IBd, IPP] at hbC ⊢
+  linarith only [hmono, hbC]
 
 /-! ### Real-number absorption -/
 

@@ -41,6 +41,20 @@ statements assume smooth `Γ` and `a`, continuous `b` and `c`, classical (`C²`)
 part (b) the Laplacian. For smooth coefficients, which is Maz'ya's setting, weak solutions are
 classical, so nothing is lost there. The log-integral in (b) is stated on `(0, ρ/2)`.
 
+## Provenance
+
+Theorem I and its informal proof were first written in 2026 in an unpublished note by the
+maintainer, with AI assistance. This formalization was produced by Claude Code agents
+(`claude-opus-5-5`) working from that proof; the statements in `Challenge.lean` were audited by
+independent AI reviewers, and the maintainer's review is pending. The formal proof follows the
+route of the note, with classical `C²` solutions throughout and no Sobolev spaces;
+[`BLUEPRINT.md`](BLUEPRINT.md) describes its organization and its departures from the note. Whether Theorem I is new
+has not been established by a systematic literature search, and no novelty is claimed here.
+
+The formalization does not build on an earlier formalization of these theorems. A few general
+lemmas were adapted from three Apache-2.0 Lean libraries, PDEAtlas, Tau Ceti and
+quasianalytic-lean; [`NOTICE`](NOTICE) lists them.
+
 ## Building
 
 ```bash

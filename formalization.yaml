@@ -52,7 +52,16 @@ sources:
     relationship: background
     note: "Trudy Moskov. Mat. Obshch. 30 (1974); English translation Trans. Moscow Math. Soc. 30 (1974), 65-117."
 
-related_formalizations: []
+related_formalizations:
+  - id: "https://github.com/Robertboy18/PDEAtlas/tree/12e4e66a7edbd1d506a469f1be087dca0c296420"
+    relationship: adapts
+    note: "Two general lemmas on derivatives of convolutions (PDE/FDeriv/Calculus/Convolution.lean, Apache-2.0) are adapted in MazyaRefinedCauchy/Pkg/R1.lean; see NOTICE."
+  - id: "https://github.com/TauCetiProject/TauCeti"
+    relationship: adapts
+    note: "Lemmas on the calculus of the Laplacian (TauCeti/Analysis/InnerProductSpace/Laplacian/Basic.lean, main branch as of 2026-11-22, Apache-2.0) are adapted in MazyaRefinedCauchy/Pkg/L.lean; see NOTICE."
+  - id: "https://github.com/eedahl/quasianalytic-lean/tree/53ee3a8c2a5ac9896b664809a99d557ed0f1eab2"
+    relationship: adapts
+    note: "Bang's step and the chain argument of the Denjoy-Carleman theorem (DenjoyCarleman/DC12.lean, DC3.lean, DC45.lean, Apache-2.0) are adapted in MazyaRefinedCauchy/Pkg/F6.lean; see NOTICE. None of these projects formalizes the theorems submitted here."
 
 status:
   scope: >-
@@ -127,4 +136,4 @@ alignment:
       status: "formalized"
       note: "Laplacian; the regularity conditions on h are restated in terms of Lambda (see fidelity item 5)."
 
-acknowledgements: "Mathlib; the Palomar template; Lean FRO's comparator."
+acknowledgements: "Mathlib; the Palomar template; Lean FRO's comparator; PDEAtlas, Tau Ceti and quasianalytic-lean, from which a few general lemmas were adapted (see NOTICE)."

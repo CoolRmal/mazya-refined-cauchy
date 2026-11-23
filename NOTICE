@@ -1,0 +1,22 @@
+Maz'ya's refined Cauchy problem at a boundary point, in Lean
+Copyright 2026 Yongxi (Aaron) Lin
+
+This project is distributed under the Apache License, Version 2.0 (the LICENSE file). It contains
+code adapted from the following projects, which are also distributed under the Apache License,
+Version 2.0. Each adapted declaration says so in its docstring or in the module documentation.
+
+PDEAtlas (https://github.com/Robertboy18/PDEAtlas, commit 12e4e66a7edbd1d506a469f1be087dca0c296420)
+Copyright 2026 LeanPDE Team
+  Two lemmas on derivatives of convolutions, from PDE/FDeriv/Calculus/Convolution.lean, adapted in
+  MazyaRefinedCauchy/Pkg/R1.lean. No code was taken from the PDEAtlas modules that its NOTICE file
+  lists as included with permission and not under its licence.
+
+Tau Ceti (https://github.com/TauCetiProject/TauCeti, main branch as of 2026-11-22)
+Copyright 2026 The Tau Ceti contributors
+  Calculus of the Laplacian, from TauCeti/Analysis/InnerProductSpace/Laplacian/Basic.lean, adapted in
+  MazyaRefinedCauchy/Pkg/L.lean.
+
+quasianalytic-lean (https://github.com/eedahl/quasianalytic-lean, commit 53ee3a8c2a5ac9896b664809a99d557ed0f1eab2)
+  Bang's step and the chain argument of the Denjoy-Carleman theorem, from
+  QuasianalyticLean/DenjoyCarleman/DC12.lean, DC3.lean and DC45.lean, adapted in
+  MazyaRefinedCauchy/Pkg/F6.lean.

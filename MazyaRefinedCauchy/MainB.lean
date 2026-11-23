@@ -40,7 +40,7 @@ lemma divergence_eq_sum {ι : Type*} [Fintype ι] (b : OrthonormalBasis ι ℝ (
   rfl
 
 open Laplacian in
-/-- `Δ u = div ∇u` for `C²` functions. Adapted from the project scouting probe `Probe2.lean`. -/
+/-- `Δ u = div ∇u` for `C²` functions. -/
 lemma laplacian_eq_divergence_gradient {u : Space n → ℝ} {x : Space n}
     (hu : ContDiffAt ℝ 2 u x) : Δ u x = divergence (gradient u) x := by
   have hd : DifferentiableAt ℝ (fderiv ℝ u) x :=

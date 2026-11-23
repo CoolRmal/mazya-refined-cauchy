@@ -62,9 +62,11 @@ Legend: **proved** means that no declaration of the module depends on `sorryAx` 
   `[propext, Classical.choice, Quot.sound]`.
 * `lake comparator` with `comparator.json` (only the three standard axioms permitted) accepts the
   solution with Lean's kernel, NanoDa and con-ron; CI runs it on every push.
-* The formal proof deviates from the note in one place: in Lemma R2 the `∇ div V` term is bounded
-  by Cauchy–Schwarz instead of an integration by parts along `A x`; this is legitimate there because
-  the constants may depend on `ε`.
+* Departures from the note: in Lemma R2 the `∇ div V` term is bounded by Cauchy–Schwarz instead of
+  an integration by parts along `A x`, which is legitimate because the constants may depend on `ε`;
+  in Lemma R1 the blow-up limit is shown to vanish by mollification and weak unique continuation,
+  without traces or weak limits of gradients; and three package interfaces were corrected (see
+  below).
 
 ## Corrections to the package interfaces
 

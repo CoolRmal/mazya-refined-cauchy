@@ -75,9 +75,7 @@ variable {n : ℕ}
 
 namespace RPkg
 
-/-! ### Real analysis: supporting lines of convex functions
-
-Adapted from the project's scouting prototypes (`scratchpad/wf1/analysis/Proto.lean`). -/
+/-! ### Real analysis: supporting lines of convex functions -/
 
 /-- Supporting line at an interior point, with slope the right derivative. -/
 theorem convex_add_rightDeriv_mul_le {S : Set ℝ} {f : ℝ → ℝ} {x y : ℝ}

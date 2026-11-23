@@ -934,6 +934,589 @@ theorem eq_zero_of_affine_bounded (m : ℝ → ℝ) (a α β B : ℝ)
   intro t ht
   rw [hconst t ht, hβ]
 
+/-! ### Proof of `hmoment_affine` (mean-value route)
+
+Route 3 of the docstring of `hmoment_affine`.
+* `hmoment_mvp`: integrating `F4.mean_value_phi` at the points `lift w t` against `⟪w, e⟫ᵏ dw`,
+  swapping the integrals (`integrable_prod_mvp`), translating `w` and expanding binomially
+  (`integral_shift`), the lower moments drop out and
+  `m_k(t) ∫ φ = ∫ m_k(t + r z_d) φ(z) dz` for all small `r > 0`.
+* `affine_of_mvp`: a continuous function with this one-dimensional mean value property is affine
+  (maximum principle `le_zero_of_mvp`, applied to `±(f - chord)`; it uses `φ ≥ 0`, the symmetry
+  `φ(-z) = φ(z)` and a point `z` with `z_d > 0`, `φ(z) > 0`).
+* `continuousOn_hmoment`: continuity of the moments (dominated convergence).
+-/
+
+namespace W_L_moment
+
+/-! ### Elementary geometry of `Space n = ℝⁿ × ℝ` -/
+
+/-- The horizontal part of a point, as an element of `ℝⁿ`. -/
+noncomputable def hpE (z : Space n) : EuclideanSpace ℝ (Fin n) :=
+  WithLp.toLp 2 (fun i => z (Fin.castSucc i))
+
+theorem hpE_apply (z : Space n) (i : Fin n) : hpE z i = z (Fin.castSucc i) := rfl
+
+theorem lift_hpE (z : Space n) : lift (hpE z) (vcoord z) = z := by
+  ext i
+  refine Fin.lastCases ?_ (fun j => ?_) i
+  · simp [F1.lift_apply_last, vcoord]
+  · simp [F1.lift_apply_castSucc, hpE_apply]
+
+theorem lift_add_smul (w : EuclideanSpace ℝ (Fin n)) (t r : ℝ) (z : Space n) :
+    lift w t + r • z = lift (w + r • hpE z) (t + r * vcoord z) := by
+  ext i
+  refine Fin.lastCases ?_ (fun j => ?_) i
+  · simp [F1.lift_apply_last, vcoord]
+  · simp [F1.lift_apply_castSucc, hpE_apply]
+
+theorem norm_hpE_le (z : Space n) : ‖hpE z‖ ≤ ‖z‖ := by
+  have h := norm_lift_sq (hpE z) (vcoord z)
+  rw [lift_hpE] at h
+  nlinarith [norm_nonneg (hpE z), norm_nonneg z, sq_nonneg (vcoord z)]
+
+theorem abs_vcoord_le (z : Space n) : |vcoord z| ≤ ‖z‖ := by
+  have h := norm_lift_sq (hpE z) (vcoord z)
+  rw [lift_hpE] at h
+  have h2 : |vcoord z| ^ 2 ≤ ‖z‖ ^ 2 := by
+    rw [sq_abs]; nlinarith [sq_nonneg ‖hpE z‖]
+  exact (sq_le_sq₀ (abs_nonneg _) (norm_nonneg _)).1 h2
+
+theorem vcoord_sub (y x : Space n) : vcoord (y - x) = vcoord y - vcoord x := by
+  simp [vcoord]
+
+/-! ### The mollifier `φ` -/
+
+theorem norm_le_of_phi_ne_zero {z : Space n} (hz : F4.phi z ≠ 0) : ‖z‖ ≤ 1 / 2 := by
+  by_contra h
+  push Not at h
+  exact hz (F4.phi_eq_zero h)
+
+theorem phi_neg (z : Space n) : F4.phi (-z) = F4.phi z := by
+  simp [F4.phi, norm_neg]
+
+theorem integral_vcoord_mul_phi : ∫ z : Space n, vcoord z * F4.phi z = 0 := by
+  have h := integral_neg_eq_self (fun z : Space n => vcoord z * F4.phi z) volume
+  have hneg : ∀ z : Space n, vcoord (-z) * F4.phi (-z) = -(vcoord z * F4.phi z) := by
+    intro z
+    rw [phi_neg]
+    simp [vcoord]
+  simp only [hneg, integral_neg] at h
+  linarith
+
+theorem exists_phi_pos : ∃ z : Space n, 0 < vcoord z ∧ 0 < F4.phi z := by
+  obtain ⟨τ, hτ, hτ'⟩ := F4.exists_deriv_prof_pos
+  refine ⟨Real.sqrt τ • ed n, ?_, ?_⟩
+  · simp [vcoord, ed, Real.sqrt_pos.2 hτ]
+  · have h1 : ‖Real.sqrt τ • ed n‖ ^ 2 = τ := by
+      rw [norm_smul, Real.norm_eq_abs, abs_of_nonneg (Real.sqrt_nonneg _)]
+      simp [ed, Real.sq_sqrt hτ.le]
+    unfold F4.phi
+    rw [h1]
+    positivity
+
+theorem continuous_vcoord_mul_phi : Continuous (fun z : Space n => vcoord z * F4.phi z) :=
+  F1.continuous_vcoord.mul F4.continuous_phi
+
+theorem integrable_vcoord_mul_phi : Integrable (fun z : Space n => vcoord z * F4.phi z) :=
+  continuous_vcoord_mul_phi.integrable_of_hasCompactSupport F4.hasCompactSupport_phi.mul_left
+
+/-- `z ↦ g (t + r z_d) φ(z)` is continuous when `g` is continuous on `(a, ∞)` and
+`t - r/2 > a`. -/
+theorem continuous_comp_mul_phi (g : ℝ → ℝ) (a t r : ℝ) (hg : ContinuousOn g (Set.Ioi a))
+    (hr : 0 ≤ r) (ht : a < t - r / 2) :
+    Continuous (fun z : Space n => g (t + r * vcoord z) * F4.phi z) := by
+  set O : Set (Space n) := {z | a < t + r * vcoord z} with hO
+  have hOo : IsOpen O :=
+    isOpen_lt continuous_const (continuous_const.add (continuous_const.mul F1.continuous_vcoord))
+  refine ContinuousOn.continuous_of_tsupport_subset ?_ hOo ?_
+  · refine ContinuousOn.mul ?_ F4.continuous_phi.continuousOn
+    refine hg.comp (continuous_const.add (continuous_const.mul F1.continuous_vcoord)).continuousOn
+      (fun z hz => hz)
+  · refine tsupport_mul_subset_right.trans (F4.tsupport_phi_subset.trans fun z hz => ?_)
+    rw [Metric.mem_closedBall, dist_zero_right] at hz
+    have h1 := abs_le.1 ((abs_vcoord_le z).trans hz)
+    have h2 : r * (-(1 / 2)) ≤ r * vcoord z := mul_le_mul_of_nonneg_left h1.1 hr
+    show a < t + r * vcoord z
+    linarith
+
+theorem integrable_comp_mul_phi (g : ℝ → ℝ) (a t r : ℝ) (hg : ContinuousOn g (Set.Ioi a))
+    (hr : 0 ≤ r) (ht : a < t - r / 2) :
+    Integrable (fun z : Space n => g (t + r * vcoord z) * F4.phi z) :=
+  (continuous_comp_mul_phi g a t r hg hr ht).integrable_of_hasCompactSupport
+    F4.hasCompactSupport_phi.mul_left
+
+/-! ### A one-dimensional mean value property forces affinity -/
+
+/-- Maximum principle for the one-dimensional mean value property. -/
+theorem le_zero_of_mvp (g : ℝ → ℝ) (a p q : ℝ) (hap : a < p) (_hpq : p ≤ q)
+    (hg : ContinuousOn g (Set.Ioi a))
+    (hmvp : ∀ t, a < t → ∃ r₀ > 0, ∀ r, 0 < r → r < r₀ →
+      g t * ∫ z : Space n, F4.phi z = ∫ z : Space n, g (t + r * vcoord z) * F4.phi z)
+    (hp : g p ≤ 0) (hq : g q ≤ 0) : ∀ t ∈ Set.Icc p q, g t ≤ 0 := by
+  intro t₀ ht₀
+  by_contra hpos
+  push Not at hpos
+  have hIcc : Set.Icc p q ⊆ Set.Ioi a := fun x hx => lt_of_lt_of_le hap hx.1
+  have hgc : ContinuousOn g (Set.Icc p q) := hg.mono hIcc
+  obtain ⟨tm, htm, hmax⟩ := isCompact_Icc.exists_isMaxOn ⟨t₀, ht₀⟩ hgc
+  set M := g tm with hM
+  have hMpos : 0 < M := lt_of_lt_of_le hpos (isMaxOn_iff.1 hmax t₀ ht₀)
+  set S := Set.Icc p q ∩ g ⁻¹' {M} with hS
+  have hSc : IsClosed S := hgc.preimage_isClosed_of_isClosed isClosed_Icc isClosed_singleton
+  have hSk : IsCompact S := isCompact_Icc.of_isClosed_subset hSc Set.inter_subset_left
+  have hSne : S.Nonempty := ⟨tm, htm, rfl⟩
+  obtain ⟨t₁, ht₁S, ht₁g⟩ := hSk.exists_isGreatest hSne
+  have ht₁ : t₁ ∈ Set.Icc p q := ht₁S.1
+  have hgt₁ : g t₁ = M := ht₁S.2
+  have ht₁q : t₁ < q := by
+    rcases lt_or_eq_of_le ht₁.2 with h | h
+    · exact h
+    · exfalso; rw [h] at hgt₁; linarith
+  have ht₁p : p < t₁ := by
+    rcases lt_or_eq_of_le ht₁.1 with h | h
+    · exact h
+    · exfalso; rw [← h] at hgt₁; linarith
+  obtain ⟨r₀, hr₀, hr₀'⟩ := hmvp t₁ (lt_trans hap ht₁p)
+  set r := min (r₀ / 2) (min (q - t₁) (t₁ - p)) with hr
+  have hrpos : 0 < r := lt_min (by linarith) (lt_min (by linarith) (by linarith))
+  have hrr₀ : r < r₀ := lt_of_le_of_lt (min_le_left _ _) (by linarith)
+  have hrq : r ≤ q - t₁ := le_trans (min_le_right _ _) (min_le_left _ _)
+  have hrp : r ≤ t₁ - p := le_trans (min_le_right _ _) (min_le_right _ _)
+  have hmv := hr₀' r hrpos hrr₀
+  have hsupp : ∀ z : Space n, F4.phi z ≠ 0 → t₁ + r * vcoord z ∈ Set.Icc p q := by
+    intro z hz
+    have h1 := abs_le.1 ((abs_vcoord_le z).trans (norm_le_of_phi_ne_zero hz))
+    have h2 : r * (-(1 / 2)) ≤ r * vcoord z := mul_le_mul_of_nonneg_left h1.1 hrpos.le
+    have h3 : r * vcoord z ≤ r * (1 / 2) := mul_le_mul_of_nonneg_left h1.2 hrpos.le
+    constructor <;> linarith
+  have hat : a < t₁ - r / 2 := by linarith
+  have hint : Integrable (fun z : Space n => g (t₁ + r * vcoord z) * F4.phi z) :=
+    integrable_comp_mul_phi g a t₁ r hg hrpos.le hat
+  have hcont : Continuous (fun z : Space n => g (t₁ + r * vcoord z) * F4.phi z) :=
+    continuous_comp_mul_phi g a t₁ r hg hrpos.le hat
+  set h : Space n → ℝ := fun z => M * F4.phi z - g (t₁ + r * vcoord z) * F4.phi z with hh
+  have hh_cont : Continuous h := (continuous_const.mul F4.continuous_phi).sub hcont
+  have hh_nonneg : 0 ≤ h := by
+    intro z
+    simp only [hh, Pi.zero_apply]
+    by_cases hz : F4.phi z = 0
+    · simp [hz]
+    · have hle : g (t₁ + r * vcoord z) ≤ M := isMaxOn_iff.1 hmax _ (hsupp z hz)
+      have := F4.phi_nonneg z
+      nlinarith
+  have hh_int : Integrable h := (F4.integrable_phi.const_mul M).sub hint
+  have hh_zero : ∫ z, h z = 0 := by
+    simp only [hh]
+    rw [integral_sub (F4.integrable_phi.const_mul M) hint, integral_const_mul, ← hmv, hgt₁]
+    ring
+  have hae := (integral_eq_zero_iff_of_nonneg hh_nonneg hh_int).1 hh_zero
+  have heq : h = 0 := (hh_cont.ae_eq_iff_eq volume continuous_zero).1 hae
+  obtain ⟨z₀, hz₀v, hz₀φ⟩ := exists_phi_pos (n := n)
+  have h0 := congrFun heq z₀
+  simp only [hh, Pi.zero_apply] at h0
+  have hgz : g (t₁ + r * vcoord z₀) = M := by
+    have h5 : (M - g (t₁ + r * vcoord z₀)) * F4.phi z₀ = 0 := by rw [sub_mul]; exact h0
+    rcases mul_eq_zero.1 h5 with h6 | h6
+    · linarith
+    · exact absurd h6 hz₀φ.ne'
+  have hmem : t₁ + r * vcoord z₀ ∈ S := ⟨hsupp z₀ hz₀φ.ne', hgz⟩
+  have := ht₁g hmem
+  nlinarith [mul_pos hrpos hz₀v]
+
+/-- Affine combinations preserve the mean value property. -/
+theorem mvp_affine_comb (f : ℝ → ℝ) (a : ℝ) (hf : ContinuousOn f (Set.Ioi a))
+    (hmvp : ∀ t, a < t → ∃ r₀ > 0, ∀ r, 0 < r → r < r₀ →
+      f t * ∫ z : Space n, F4.phi z = ∫ z : Space n, f (t + r * vcoord z) * F4.phi z)
+    (c α β : ℝ) :
+    ∀ t, a < t → ∃ r₀ > 0, ∀ r, 0 < r → r < r₀ →
+      (c * (f t - (α * t + β))) * ∫ z : Space n, F4.phi z =
+        ∫ z : Space n, (c * (f (t + r * vcoord z) - (α * (t + r * vcoord z) + β))) *
+          F4.phi z := by
+  intro t ht
+  obtain ⟨r₀, hr₀, hr₀'⟩ := hmvp t ht
+  refine ⟨min r₀ (t - a), lt_min hr₀ (by linarith), fun r hr hrr => ?_⟩
+  have hr1 : r < r₀ := lt_of_lt_of_le hrr (min_le_left _ _)
+  have hr2 : r < t - a := lt_of_lt_of_le hrr (min_le_right _ _)
+  have hat : a < t - r / 2 := by linarith
+  have hint : Integrable (fun z : Space n => f (t + r * vcoord z) * F4.phi z) :=
+    integrable_comp_mul_phi f a t r hf hr.le hat
+  have e : ∀ z : Space n, (c * (f (t + r * vcoord z) - (α * (t + r * vcoord z) + β))) *
+      F4.phi z = c * (f (t + r * vcoord z) * F4.phi z) - (c * (α * t + β)) * F4.phi z -
+        (c * α * r) * (vcoord z * F4.phi z) := by
+    intro z; ring
+  simp_rw [e]
+  have i1 : Integrable (fun z : Space n => c * (f (t + r * vcoord z) * F4.phi z)) :=
+    hint.const_mul c
+  have i2 : Integrable (fun z : Space n => (c * (α * t + β)) * F4.phi z) :=
+    F4.integrable_phi.const_mul _
+  have i3 : Integrable (fun z : Space n => (c * α * r) * (vcoord z * F4.phi z)) :=
+    integrable_vcoord_mul_phi.const_mul _
+  have i12 : Integrable (fun z : Space n =>
+      c * (f (t + r * vcoord z) * F4.phi z) - (c * (α * t + β)) * F4.phi z) := i1.sub i2
+  rw [integral_sub i12 i3, integral_sub i1 i2,
+    integral_const_mul, integral_const_mul, integral_const_mul, integral_vcoord_mul_phi,
+    ← hr₀' r hr hr1]
+  ring
+
+/-- **A continuous function with the one-dimensional mean value property is affine.** -/
+theorem affine_of_mvp (f : ℝ → ℝ) (a : ℝ) (hf : ContinuousOn f (Set.Ioi a))
+    (hmvp : ∀ t, a < t → ∃ r₀ > 0, ∀ r, 0 < r → r < r₀ →
+      f t * ∫ z : Space n, F4.phi z = ∫ z : Space n, f (t + r * vcoord z) * F4.phi z) :
+    ∃ α β : ℝ, ∀ t, a < t → f t = α * t + β := by
+  -- on every interval `[p, q]`, `f` agrees with its chord
+  have hchord : ∀ p q, a < p → p < q → ∀ t ∈ Set.Icc p q,
+      f t = f p + (f q - f p) / (q - p) * (t - p) := by
+    intro p q hap hpq t ht
+    set s := (f q - f p) / (q - p) with hs
+    have hqp : q - p ≠ 0 := sub_ne_zero.2 hpq.ne'
+    have hsq : f q - (s * q + (f p - s * p)) = 0 := by
+      rw [hs]; field_simp; ring
+    have hsp : f p - (s * p + (f p - s * p)) = 0 := by ring
+    have hgc : ∀ c : ℝ, ContinuousOn (fun t => c * (f t - (s * t + (f p - s * p))))
+        (Set.Ioi a) := fun c =>
+      continuousOn_const.mul (hf.sub (continuousOn_const.mul continuousOn_id |>.add
+        continuousOn_const))
+    have h1 := le_zero_of_mvp (n := n) (fun t => 1 * (f t - (s * t + (f p - s * p)))) a p q hap
+      hpq.le (hgc 1) (mvp_affine_comb f a hf hmvp 1 s (f p - s * p))
+      (show 1 * (f p - (s * p + (f p - s * p))) ≤ 0 by rw [hsp]; norm_num)
+      (show 1 * (f q - (s * q + (f p - s * p))) ≤ 0 by rw [hsq]; norm_num) t ht
+    have h2 := le_zero_of_mvp (n := n) (fun t => (-1) * (f t - (s * t + (f p - s * p)))) a p q
+      hap hpq.le (hgc (-1)) (mvp_affine_comb f a hf hmvp (-1) s (f p - s * p))
+      (show (-1) * (f p - (s * p + (f p - s * p))) ≤ 0 by rw [hsp]; norm_num)
+      (show (-1) * (f q - (s * q + (f p - s * p))) ≤ 0 by rw [hsq]; norm_num) t ht
+    have h1' : 1 * (f t - (s * t + (f p - s * p))) ≤ 0 := h1
+    have h2' : (-1) * (f t - (s * t + (f p - s * p))) ≤ 0 := h2
+    linarith
+  refine ⟨f (a + 2) - f (a + 1), f (a + 1) - (f (a + 2) - f (a + 1)) * (a + 1), fun t ht => ?_⟩
+  set p := min t (a + 1) with hp
+  set q := max t (a + 2) with hq
+  have hap : a < p := lt_min ht (by linarith)
+  have hpq : p < q := lt_of_le_of_lt (min_le_right _ _)
+    (lt_of_lt_of_le (by linarith) (le_max_right _ _))
+  have hmem : ∀ x, a + 1 ≤ x → x ≤ a + 2 → x ∈ Set.Icc p q := fun x h1 h2 =>
+    ⟨le_trans (min_le_right _ _) h1, le_trans h2 (le_max_right _ _)⟩
+  have e1 := hchord p q hap hpq (a + 1) (hmem _ le_rfl (by linarith))
+  have e2 := hchord p q hap hpq (a + 2) (hmem _ (by linarith) le_rfl)
+  have e3 := hchord p q hap hpq t ⟨min_le_left _ _, le_max_left _ _⟩
+  set s := (f q - f p) / (q - p)
+  have hs : s = f (a + 2) - f (a + 1) := by linarith
+  rw [e3, ← hs]
+  linarith
+
+
+/-! ### Decay of `U` and integrability of the moment integrands -/
+
+theorem exp_neg_psiBar_le (ψ : ℝ → ℝ) (hψ_mono : MonotoneOn ψ (Set.Ici 1))
+    (hψ_log : Tendsto (fun s => ψ s / Real.log s) atTop atTop) (N : ℕ) :
+    ∃ K : ℝ, 0 ≤ K ∧ ∀ ρ : ℝ, 0 ≤ ρ → Real.exp (-psiBar ψ ρ) ≤ K * ((1 + ρ) ^ N)⁻¹ := by
+  obtain ⟨S, hS2, hS⟩ := exists_mul_log_le ψ hψ_log (N : ℝ)
+  have hS0 : 0 ≤ S := by linarith
+  set K : ℝ := 2 ^ N + Real.exp (-ψ 1) * (1 + S) ^ N with hK
+  refine ⟨K, by positivity, fun ρ hρ => ?_⟩
+  have hpos : 0 < 1 + ρ := by linarith
+  have hE : 0 ≤ Real.exp (-ψ 1) * (1 + S) ^ N * ((1 + ρ) ^ N)⁻¹ := by positivity
+  have h6 : 0 ≤ 2 ^ N * ((1 + ρ) ^ N)⁻¹ := by positivity
+  have hK' : K * ((1 + ρ) ^ N)⁻¹ = 2 ^ N * ((1 + ρ) ^ N)⁻¹ +
+      Real.exp (-ψ 1) * (1 + S) ^ N * ((1 + ρ) ^ N)⁻¹ := by rw [hK]; ring
+  rw [hK']
+  by_cases hρS : S ≤ ρ
+  · have hρ1 : (1 : ℝ) ≤ ρ := by linarith
+    have hρpos : 0 < ρ := by linarith
+    have hψρ : psiBar ψ ρ = ψ ρ := by simp [psiBar, max_eq_left hρ1]
+    have h1 : Real.exp (-psiBar ψ ρ) ≤ (ρ ^ N)⁻¹ := by
+      rw [hψρ]
+      have := hS ρ hρS
+      calc Real.exp (-ψ ρ) ≤ Real.exp (-((N : ℝ) * Real.log ρ)) :=
+            Real.exp_le_exp.2 (by linarith)
+        _ = (ρ ^ N)⁻¹ := by
+          rw [← Real.log_pow, Real.exp_neg, Real.exp_log (pow_pos hρpos _)]
+    have h3 : (ρ ^ N)⁻¹ ≤ 2 ^ N * ((1 + ρ) ^ N)⁻¹ := by
+      have h4 : (1 + ρ) ^ N ≤ (2 * ρ) ^ N := pow_le_pow_left₀ hpos.le (by linarith) _
+      rw [mul_pow] at h4
+      rw [← div_eq_mul_inv, le_div_iff₀ (by positivity)]
+      calc (ρ ^ N)⁻¹ * (1 + ρ) ^ N ≤ (ρ ^ N)⁻¹ * (2 ^ N * ρ ^ N) :=
+            mul_le_mul_of_nonneg_left h4 (by positivity)
+        _ = 2 ^ N := by field_simp
+    linarith
+  · push Not at hρS
+    have h1 : Real.exp (-psiBar ψ ρ) ≤ Real.exp (-ψ 1) :=
+      Real.exp_le_exp.2 (neg_le_neg (le_psiBar ψ hψ_mono ρ))
+    have h3 : 1 ≤ (1 + S) ^ N * ((1 + ρ) ^ N)⁻¹ := by
+      rw [← div_eq_mul_inv, le_div_iff₀ (by positivity), one_mul]
+      exact pow_le_pow_left₀ hpos.le (by linarith) _
+    have h5 : Real.exp (-ψ 1) ≤ Real.exp (-ψ 1) * (1 + S) ^ N * ((1 + ρ) ^ N)⁻¹ := by
+      rw [mul_assoc]; exact le_mul_of_one_le_right (Real.exp_pos _).le h3
+    linarith
+
+theorem slice_poly_bound (lam : ℝ) (hlam : 1 ≤ lam) (U : Space n → ℝ) (ψ : ℝ → ℝ) (Cu : ℝ)
+    (hdecay : ∀ y, lam < vcoord y → |U y| ≤ Cu * Real.exp (-ψ ‖y‖))
+    (hψ_mono : MonotoneOn ψ (Set.Ici 1))
+    (hψ_log : Tendsto (fun s => ψ s / Real.log s) atTop atTop) (N : ℕ) :
+    ∃ C : ℝ, 0 ≤ C ∧ ∀ (y' : EuclideanSpace ℝ (Fin n)) (t : ℝ), lam < t →
+      |U (lift y' t)| ≤ C * ((1 + ‖y'‖) ^ N)⁻¹ := by
+  obtain ⟨K, hK, hKb⟩ := exp_neg_psiBar_le ψ hψ_mono hψ_log N
+  have hCu := cu_nonneg lam U ψ Cu hdecay
+  refine ⟨Cu * K, mul_nonneg hCu hK, fun y' t ht => ?_⟩
+  calc |U (lift y' t)| ≤ Cu * Real.exp (-psiBar ψ ‖y'‖) :=
+        slice_bound lam hlam U ψ Cu hdecay hψ_mono t ht y'
+    _ ≤ Cu * (K * ((1 + ‖y'‖) ^ N)⁻¹) := mul_le_mul_of_nonneg_left (hKb _ (norm_nonneg _)) hCu
+    _ = Cu * K * ((1 + ‖y'‖) ^ N)⁻¹ := by ring
+
+theorem moment_integrand_bound (lam : ℝ) (hlam : 1 ≤ lam) (U : Space n → ℝ) (ψ : ℝ → ℝ)
+    (Cu : ℝ) (hdecay : ∀ y, lam < vcoord y → |U y| ≤ Cu * Real.exp (-ψ ‖y‖))
+    (hψ_mono : MonotoneOn ψ (Set.Ici 1)) (e : EuclideanSpace ℝ (Fin n)) (j : ℕ) (s : ℝ)
+    (hs : lam < s) (y' : EuclideanSpace ℝ (Fin n)) :
+    ‖⟪y', e⟫_ℝ ^ j * U (lift y' s)‖ ≤ ‖e‖ ^ j * Cu * (‖y'‖ ^ j * Real.exp (-psiBar ψ ‖y'‖)) := by
+  have hCu := cu_nonneg lam U ψ Cu hdecay
+  rw [Real.norm_eq_abs, abs_mul, abs_pow]
+  have h1 : |⟪y', e⟫_ℝ| ^ j ≤ (‖e‖ * ‖y'‖) ^ j := by
+    gcongr
+    rw [mul_comm]
+    exact abs_real_inner_le_norm y' e
+  have h2 := slice_bound lam hlam U ψ Cu hdecay hψ_mono s hs y'
+  calc |⟪y', e⟫_ℝ| ^ j * |U (lift y' s)| ≤ (‖e‖ * ‖y'‖) ^ j * (Cu * Real.exp (-psiBar ψ ‖y'‖)) :=
+        mul_le_mul h1 h2 (abs_nonneg _) (by positivity)
+    _ = ‖e‖ ^ j * Cu * (‖y'‖ ^ j * Real.exp (-psiBar ψ ‖y'‖)) := by ring
+
+theorem integrable_moment (lam : ℝ) (hlam : 1 ≤ lam) (U : Space n → ℝ)
+    (hU : HarmonicOnNhd U {y | lam < vcoord y}) (ψ : ℝ → ℝ) (Cu : ℝ)
+    (hdecay : ∀ y, lam < vcoord y → |U y| ≤ Cu * Real.exp (-ψ ‖y‖))
+    (hψ_mono : MonotoneOn ψ (Set.Ici 1))
+    (hψ_log : Tendsto (fun s => ψ s / Real.log s) atTop atTop)
+    (e : EuclideanSpace ℝ (Fin n)) (j : ℕ) (s : ℝ) (hs : lam < s) :
+    Integrable (fun y' : EuclideanSpace ℝ (Fin n) => ⟪y', e⟫_ℝ ^ j * U (lift y' s)) :=
+  ((integrable_pow_mul_exp_neg_psiBar ψ hψ_mono hψ_log j).const_mul (‖e‖ ^ j * Cu)).mono'
+    (((continuous_id.inner continuous_const).pow j).mul
+      (slice_continuous lam U hU s hs)).aestronglyMeasurable
+    (Filter.Eventually.of_forall fun y' =>
+      moment_integrand_bound lam hlam U ψ Cu hdecay hψ_mono e j s hs y')
+
+theorem continuousOn_hmoment (lam : ℝ) (hlam : 1 ≤ lam) (U : Space n → ℝ)
+    (hU : HarmonicOnNhd U {y | lam < vcoord y}) (ψ : ℝ → ℝ) (Cu : ℝ)
+    (hdecay : ∀ y, lam < vcoord y → |U y| ≤ Cu * Real.exp (-ψ ‖y‖))
+    (hψ_mono : MonotoneOn ψ (Set.Ici 1))
+    (hψ_log : Tendsto (fun s => ψ s / Real.log s) atTop atTop)
+    (e : EuclideanSpace ℝ (Fin n)) (k : ℕ) :
+    ContinuousOn (hmoment U e k) (Set.Ioi lam) := by
+  show ContinuousOn (fun t => ∫ y' : EuclideanSpace ℝ (Fin n), ⟪y', e⟫_ℝ ^ k * U (lift y' t)) _
+  refine continuousOn_of_dominated
+    (bound := fun y' => ‖e‖ ^ k * Cu * (‖y'‖ ^ k * Real.exp (-psiBar ψ ‖y'‖))) ?_ ?_
+    ((integrable_pow_mul_exp_neg_psiBar ψ hψ_mono hψ_log k).const_mul _) ?_
+  · intro t ht
+    exact (((continuous_id.inner continuous_const).pow k).mul
+      (slice_continuous lam U hU t ht)).aestronglyMeasurable
+  · intro t ht
+    exact Filter.Eventually.of_forall fun y' =>
+      moment_integrand_bound lam hlam U ψ Cu hdecay hψ_mono e k t ht y'
+  · refine Filter.Eventually.of_forall fun y' => ?_
+    refine continuousOn_const.mul ?_
+    refine hU.continuousOn.comp (F1.continuous_lift_right y').continuousOn fun t ht => ?_
+    show lam < vcoord (lift y' t)
+    rw [vcoord_lift]
+    exact ht
+
+/-! ### The mean value property of the moments -/
+
+/-- Translating the horizontal variable and expanding binomially: the lower moments drop out. -/
+theorem integral_shift (lam : ℝ) (hlam : 1 ≤ lam) (U : Space n → ℝ)
+    (hU : HarmonicOnNhd U {y | lam < vcoord y}) (ψ : ℝ → ℝ) (Cu : ℝ)
+    (hdecay : ∀ y, lam < vcoord y → |U y| ≤ Cu * Real.exp (-ψ ‖y‖))
+    (hψ_mono : MonotoneOn ψ (Set.Ici 1))
+    (hψ_log : Tendsto (fun s => ψ s / Real.log s) atTop atTop)
+    (e : EuclideanSpace ℝ (Fin n)) (k : ℕ)
+    (hprev : ∀ j < k, ∀ t, lam + 1 / 2 < t → hmoment U e j t = 0)
+    (s : ℝ) (hs : lam + 1 / 2 < s) (c : EuclideanSpace ℝ (Fin n)) :
+    ∫ w : EuclideanSpace ℝ (Fin n), ⟪w, e⟫_ℝ ^ k * U (lift (w + c) s) = hmoment U e k s := by
+  have hs' : lam < s := by linarith
+  have h1 : ∫ w : EuclideanSpace ℝ (Fin n), ⟪w, e⟫_ℝ ^ k * U (lift (w + c) s) =
+      ∫ v : EuclideanSpace ℝ (Fin n), ⟪v - c, e⟫_ℝ ^ k * U (lift v s) := by
+    rw [← integral_add_right_eq_self (fun v : EuclideanSpace ℝ (Fin n) =>
+      ⟪v - c, e⟫_ℝ ^ k * U (lift v s)) c]
+    simp only [add_sub_cancel_right]
+  rw [h1]
+  have h2 : ∀ v : EuclideanSpace ℝ (Fin n), ⟪v - c, e⟫_ℝ ^ k * U (lift v s) =
+      ∑ j ∈ Finset.range (k + 1),
+        ((-⟪c, e⟫_ℝ) ^ (k - j) * (k.choose j : ℝ)) * (⟪v, e⟫_ℝ ^ j * U (lift v s)) := by
+    intro v
+    rw [inner_sub_left, sub_eq_add_neg, add_pow, Finset.sum_mul]
+    exact Finset.sum_congr rfl fun j _ => by ring
+  simp_rw [h2]
+  rw [integral_finsetSum _ (fun j _ =>
+    (integrable_moment lam hlam U hU ψ Cu hdecay hψ_mono hψ_log e j s hs').const_mul _)]
+  rw [Finset.sum_range_succ]
+  have h3 : ∑ j ∈ Finset.range k, ∫ v : EuclideanSpace ℝ (Fin n),
+      ((-⟪c, e⟫_ℝ) ^ (k - j) * (k.choose j : ℝ)) * (⟪v, e⟫_ℝ ^ j * U (lift v s)) = 0 := by
+    refine Finset.sum_eq_zero fun j hj => ?_
+    rw [integral_const_mul]
+    have := hprev j (Finset.mem_range.1 hj) s hs
+    rw [hmoment] at this
+    rw [this, mul_zero]
+  rw [h3, zero_add, integral_const_mul]
+  simp [hmoment]
+
+theorem inner_integral_eq (lam : ℝ) (hlam : 1 ≤ lam) (U : Space n → ℝ)
+    (hU : HarmonicOnNhd U {y | lam < vcoord y}) (ψ : ℝ → ℝ) (Cu : ℝ)
+    (hdecay : ∀ y, lam < vcoord y → |U y| ≤ Cu * Real.exp (-ψ ‖y‖))
+    (hψ_mono : MonotoneOn ψ (Set.Ici 1))
+    (hψ_log : Tendsto (fun s => ψ s / Real.log s) atTop atTop)
+    (e : EuclideanSpace ℝ (Fin n)) (k : ℕ)
+    (hprev : ∀ j < k, ∀ t, lam + 1 / 2 < t → hmoment U e j t = 0)
+    (t r : ℝ) (_ht : lam + 1 / 2 < t) (hr0 : 0 ≤ r) (hr : r < 2 * (t - (lam + 1 / 2)))
+    (z : Space n) :
+    ∫ w : EuclideanSpace ℝ (Fin n), ⟪w, e⟫_ℝ ^ k * U (lift w t + r • z) * F4.phi z =
+      hmoment U e k (t + r * vcoord z) * F4.phi z := by
+  by_cases hz : F4.phi z = 0
+  · simp [hz]
+  · have h1 := abs_le.1 ((abs_vcoord_le z).trans (norm_le_of_phi_ne_zero hz))
+    have h2 : r * (-(1 / 2)) ≤ r * vcoord z := mul_le_mul_of_nonneg_left h1.1 hr0
+    have hs : lam + 1 / 2 < t + r * vcoord z := by linarith
+    rw [integral_mul_const]
+    congr 1
+    simp_rw [lift_add_smul]
+    exact integral_shift lam hlam U hU ψ Cu hdecay hψ_mono hψ_log e k hprev _ hs _
+
+/-- Integrability on `ℝⁿ × ℝⁿ⁺¹` of the integrand of the averaged mean value identity. -/
+theorem integrable_prod_mvp (lam : ℝ) (hlam : 1 ≤ lam) (U : Space n → ℝ)
+    (hU : HarmonicOnNhd U {y | lam < vcoord y}) (ψ : ℝ → ℝ) (Cu : ℝ)
+    (hdecay : ∀ y, lam < vcoord y → |U y| ≤ Cu * Real.exp (-ψ ‖y‖))
+    (hψ_mono : MonotoneOn ψ (Set.Ici 1))
+    (hψ_log : Tendsto (fun s => ψ s / Real.log s) atTop atTop)
+    (e : EuclideanSpace ℝ (Fin n)) (k : ℕ)
+    (t r : ℝ) (ht : lam + 1 / 2 < t) (hr0 : 0 ≤ r) (hr1 : r ≤ 1 / 2) :
+    Integrable (fun p : EuclideanSpace ℝ (Fin n) × Space n =>
+      ⟪p.1, e⟫_ℝ ^ k * U (lift p.1 t + r • p.2) * F4.phi p.2) (volume.prod volume) := by
+  set N := k + n + 1 with hN
+  obtain ⟨C, hC, hCb⟩ := slice_poly_bound lam hlam U ψ Cu hdecay hψ_mono hψ_log N
+  have hint1 : Integrable (fun w : EuclideanSpace ℝ (Fin n) => (1 + ‖w‖) ^ (-((n : ℝ) + 1))) :=
+    integrable_one_add_norm (by simp)
+  have hint1' : Integrable (fun w : EuclideanSpace ℝ (Fin n) => ((1 + ‖w‖) ^ (n + 1))⁻¹) := by
+    refine hint1.congr (Filter.Eventually.of_forall fun w => ?_)
+    have hpos : 0 < 1 + ‖w‖ := by positivity
+    show (1 + ‖w‖) ^ (-((n : ℝ) + 1)) = ((1 + ‖w‖) ^ (n + 1))⁻¹
+    rw [Real.rpow_neg hpos.le]
+    congr 1
+    exact_mod_cast Real.rpow_natCast (1 + ‖w‖) (n + 1)
+  have hint := (hint1'.mul_prod (F4.integrable_phi (n := n))).const_mul
+    (‖e‖ ^ k * C * (4 / 3) ^ N)
+  set O : Set (EuclideanSpace ℝ (Fin n) × Space n) := {p | lam < t + r * vcoord p.2} with hO
+  have hOo : IsOpen O := isOpen_lt continuous_const
+    (continuous_const.add (continuous_const.mul (F1.continuous_vcoord.comp continuous_snd)))
+  have hsub : {p : EuclideanSpace ℝ (Fin n) × Space n | ‖p.2‖ ≤ 1 / 2} ⊆ O := by
+    intro p hp
+    have h1 := abs_le.1 ((abs_vcoord_le p.2).trans hp)
+    have h2 : r * (-(1 / 2)) ≤ r * vcoord p.2 := mul_le_mul_of_nonneg_left h1.1 hr0
+    show lam < t + r * vcoord p.2
+    nlinarith
+  have hcont : Continuous (fun p : EuclideanSpace ℝ (Fin n) × Space n =>
+      ⟪p.1, e⟫_ℝ ^ k * U (lift p.1 t + r • p.2) * F4.phi p.2) := by
+    refine ContinuousOn.continuous_of_tsupport_subset ?_ hOo ?_
+    · refine ContinuousOn.mul (ContinuousOn.mul ?_ ?_) ?_
+      · exact ((continuous_fst.inner continuous_const).pow k).continuousOn
+      · refine hU.continuousOn.comp (Continuous.continuousOn ?_) fun p hp => ?_
+        · exact ((F1.continuous_lift_left t).comp continuous_fst).add
+            (continuous_snd.const_smul r)
+        · show lam < vcoord (lift p.1 t + r • p.2)
+          rw [lift_add_smul, vcoord_lift]
+          exact hp
+      · exact (F4.continuous_phi.comp continuous_snd).continuousOn
+    · refine Set.Subset.trans (closure_minimal (fun p hp => ?_)
+        (isClosed_le continuous_snd.norm continuous_const)) hsub
+      refine norm_le_of_phi_ne_zero fun h => (Function.mem_support.1 hp) ?_
+      simp [h]
+  refine hint.mono' hcont.aestronglyMeasurable (Filter.Eventually.of_forall fun p => ?_)
+  obtain ⟨w, z⟩ := p
+  show ‖⟪w, e⟫_ℝ ^ k * U (lift w t + r • z) * F4.phi z‖ ≤
+    ‖e‖ ^ k * C * (4 / 3) ^ N * (((1 + ‖w‖) ^ (n + 1))⁻¹ * F4.phi z)
+  have hφ := F4.phi_nonneg z
+  by_cases hz : F4.phi z = 0
+  · simp [hz]
+  · have hz' := norm_le_of_phi_ne_zero hz
+    have hs : lam < t + r * vcoord z := hsub (show ‖(w, z).2‖ ≤ 1 / 2 from hz')
+    have hU1 : |U (lift w t + r • z)| ≤ C * ((1 + ‖w + r • hpE z‖) ^ N)⁻¹ := by
+      rw [lift_add_smul]; exact hCb _ _ hs
+    have hc : ‖r • hpE z‖ ≤ 1 / 4 := by
+      rw [norm_smul, Real.norm_eq_abs, abs_of_nonneg hr0]
+      have h5 : ‖hpE z‖ ≤ 1 / 2 := (norm_hpE_le z).trans hz'
+      calc r * ‖hpE z‖ ≤ (1 / 2) * (1 / 2) := mul_le_mul hr1 h5 (norm_nonneg _) (by norm_num)
+        _ = 1 / 4 := by norm_num
+    have hw : ‖w‖ ≤ ‖w + r • hpE z‖ + ‖r • hpE z‖ := by
+      have := norm_sub_le (w + r • hpE z) (r • hpE z)
+      rwa [add_sub_cancel_right] at this
+    have hge : 3 / 4 * (1 + ‖w‖) ≤ 1 + ‖w + r • hpE z‖ := by linarith [norm_nonneg w]
+    have hpos : 0 < 3 / 4 * (1 + ‖w‖) := by positivity
+    have hinv : ((1 + ‖w + r • hpE z‖) ^ N)⁻¹ ≤ (4 / 3) ^ N * ((1 + ‖w‖) ^ N)⁻¹ := by
+      have h1 : (3 / 4 * (1 + ‖w‖)) ^ N ≤ (1 + ‖w + r • hpE z‖) ^ N :=
+        pow_le_pow_left₀ hpos.le hge N
+      calc ((1 + ‖w + r • hpE z‖) ^ N)⁻¹ ≤ ((3 / 4 * (1 + ‖w‖)) ^ N)⁻¹ :=
+            inv_anti₀ (pow_pos hpos N) h1
+        _ = (4 / 3) ^ N * ((1 + ‖w‖) ^ N)⁻¹ := by
+            rw [mul_pow, mul_inv, ← inv_pow]; norm_num
+    have hpoly : |⟪w, e⟫_ℝ| ^ k ≤ ‖e‖ ^ k * (1 + ‖w‖) ^ k := by
+      rw [← mul_pow]
+      refine pow_le_pow_left₀ (abs_nonneg _) ?_ k
+      calc |⟪w, e⟫_ℝ| ≤ ‖w‖ * ‖e‖ := abs_real_inner_le_norm w e
+        _ ≤ ‖e‖ * (1 + ‖w‖) := by nlinarith [norm_nonneg e, norm_nonneg w]
+    have hpos' : 0 < 1 + ‖w‖ := by positivity
+    have hw1 : (1 + ‖w‖) ^ k * ((1 + ‖w‖) ^ N)⁻¹ = ((1 + ‖w‖) ^ (n + 1))⁻¹ := by
+      rw [hN, show k + n + 1 = k + (n + 1) by ring, pow_add, mul_inv, ← mul_assoc,
+        mul_inv_cancel₀ (pow_ne_zero _ hpos'.ne'), one_mul]
+    have hUb : |U (lift w t + r • z)| ≤ C * ((4 / 3) ^ N * ((1 + ‖w‖) ^ N)⁻¹) :=
+      hU1.trans (mul_le_mul_of_nonneg_left hinv hC)
+    rw [Real.norm_eq_abs, abs_mul, abs_mul, abs_pow, abs_of_nonneg hφ]
+    calc |⟪w, e⟫_ℝ| ^ k * |U (lift w t + r • z)| * F4.phi z
+        ≤ (‖e‖ ^ k * (1 + ‖w‖) ^ k) * (C * ((4 / 3) ^ N * ((1 + ‖w‖) ^ N)⁻¹)) * F4.phi z :=
+          mul_le_mul_of_nonneg_right (mul_le_mul hpoly hUb (abs_nonneg _) (by positivity)) hφ
+      _ = ‖e‖ ^ k * C * (4 / 3) ^ N * (((1 + ‖w‖) ^ k * ((1 + ‖w‖) ^ N)⁻¹) * F4.phi z) := by
+          ring
+      _ = ‖e‖ ^ k * C * (4 / 3) ^ N * (((1 + ‖w‖) ^ (n + 1))⁻¹ * F4.phi z) := by rw [hw1]
+
+/-- **The moments have the one-dimensional mean value property.** -/
+theorem hmoment_mvp (lam : ℝ) (hlam : 1 ≤ lam) (U : Space n → ℝ)
+    (hU : HarmonicOnNhd U {y | lam < vcoord y}) (ψ : ℝ → ℝ) (Cu : ℝ)
+    (hdecay : ∀ y, lam < vcoord y → |U y| ≤ Cu * Real.exp (-ψ ‖y‖))
+    (hψ_mono : MonotoneOn ψ (Set.Ici 1))
+    (hψ_log : Tendsto (fun s => ψ s / Real.log s) atTop atTop)
+    (e : EuclideanSpace ℝ (Fin n)) (k : ℕ)
+    (hprev : ∀ j < k, ∀ t, lam + 1 / 2 < t → hmoment U e j t = 0)
+    (t r : ℝ) (ht : lam + 1 / 2 < t) (hr0 : 0 < r) (hr1 : r ≤ 1 / 2)
+    (hr : r < 2 * (t - (lam + 1 / 2))) :
+    hmoment U e k t * ∫ z : Space n, F4.phi z =
+      ∫ z : Space n, hmoment U e k (t + r * vcoord z) * F4.phi z := by
+  have hpt : ∀ w : EuclideanSpace ℝ (Fin n),
+      U (lift w t) * ∫ z : Space n, F4.phi z =
+        ∫ z : Space n, U (lift w t + r • z) * F4.phi z := by
+    intro w
+    refine F4.mean_value_phi hr0 (hU.mono fun y hy => ?_)
+    rw [Metric.mem_ball, dist_eq_norm] at hy
+    have h1 := abs_le.1 ((abs_vcoord_le (y - lift w t)).trans hy.le)
+    rw [vcoord_sub, vcoord_lift] at h1
+    show lam < vcoord y
+    linarith [h1.1]
+  calc hmoment U e k t * ∫ z : Space n, F4.phi z
+      = ∫ w : EuclideanSpace ℝ (Fin n),
+          ⟪w, e⟫_ℝ ^ k * U (lift w t) * ∫ z : Space n, F4.phi z := by
+        rw [hmoment, integral_mul_const]
+    _ = ∫ w : EuclideanSpace ℝ (Fin n), ∫ z : Space n,
+          ⟪w, e⟫_ℝ ^ k * U (lift w t + r • z) * F4.phi z := by
+        congr 1
+        funext w
+        rw [mul_assoc, hpt w, ← integral_const_mul]
+        congr 1
+        funext z
+        ring
+    _ = ∫ z : Space n, ∫ w : EuclideanSpace ℝ (Fin n),
+          ⟪w, e⟫_ℝ ^ k * U (lift w t + r • z) * F4.phi z :=
+        integral_integral_swap
+          (integrable_prod_mvp lam hlam U hU ψ Cu hdecay hψ_mono hψ_log e k t r ht hr0.le hr1)
+    _ = ∫ z : Space n, hmoment U e k (t + r * vcoord z) * F4.phi z := by
+        congr 1
+        funext z
+        exact inner_integral_eq lam hlam U hU ψ Cu hdecay hψ_mono hψ_log e k hprev t r ht
+          hr0.le hr z
+
+end W_L_moment
+
 /-- **The moments are affine** (PDE input): if all lower moments `m_j` (`j < k`) vanish on
 `(λ + 1/2, ∞)`, then `m_k` is affine there.
 
@@ -959,7 +1542,13 @@ theorem hmoment_affine (lam : ℝ) (hlam : 1 ≤ lam) (U : Space n → ℝ)
     (e : EuclideanSpace ℝ (Fin n)) (k : ℕ)
     (hprev : ∀ j < k, ∀ t, lam + 1 / 2 < t → hmoment U e j t = 0) :
     ∃ α β : ℝ, ∀ t, lam + 1 / 2 < t → hmoment U e k t = α * t + β := by
-  sorry
+  refine W_L_moment.affine_of_mvp (n := n) (hmoment U e k) (lam + 1 / 2)
+    ((W_L_moment.continuousOn_hmoment lam hlam U hU ψ Cu hdecay hψ_mono hψ_log e k).mono
+      (Set.Ioi_subset_Ioi (by linarith))) fun t ht => ?_
+  refine ⟨min (1 / 2) (2 * (t - (lam + 1 / 2))), lt_min (by norm_num) (by linarith),
+    fun r hr0 hr => ?_⟩
+  exact W_L_moment.hmoment_mvp lam hlam U hU ψ Cu hdecay hψ_mono hψ_log e k hprev t r ht hr0
+    (lt_of_lt_of_le hr (min_le_left _ _)).le (lt_of_lt_of_le hr (min_le_right _ _))
 
 /-- **Vanishing of the horizontal moments.** For a harmonic function on `{t > λ}` decaying faster
 than every power, all moments `∫ ⟪y', e⟫ᵏ U(y', t) dy'` vanish for `t > λ + 1`.

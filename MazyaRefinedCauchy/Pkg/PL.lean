@@ -453,6 +453,421 @@ theorem norm_tA_le {y : Space n} (hy : y ≠ 0) (A : Space n → Space n →L[�
         · exact norm_refl_le hy
     _ = _ := by ring
 
+namespace W_PL_tA
+
+/-! ### Helpers for `PL.tA_deriv_bounds`
+
+All derivatives are taken within the open set `punct n = {y ≠ 0}` (`iteratedFDerivWithin`),
+where `invMap` and `refl` are smooth.
+
+1. `homog_bound`: if `f` is `C²` on `{y ≠ 0}` and `f (t • y) = t ^ a • f y` for `t > 0`, then
+   `‖D^k f y‖ ≤ M ‖y‖ ^ (a - k)` (homogeneity plus compactness of the unit sphere).
+2. Applied to `invMap` (degree `-1`) and `refl` (degree `0`).
+3. `E y = A (invMap y) - I`: `‖E y‖ ≤ K / ‖y‖` (mean value theorem and `A 0 = I`); the
+   derivative bounds come from `norm_iteratedFDerivWithin_comp_le` (Faà di Bruno bound).
+4. Leibniz bound (`norm_iteratedFDerivWithin_le_of_bilinear_of_le_one` with `compL`) for
+   `G y = refl y ∘L (E y ∘L refl y)`.
+5. `tA A = G + I` on `{y ≠ 0}` (`tA_sub_id`), so `tA A` and `G` have the same derivatives.
+
+Status: complete, every proof in this block is closed; `tA_deriv_bounds` uses only `propext`,
+`Classical.choice`, `Quot.sound`. -/
+
+/-- The punctured space `{y ≠ 0}`. -/
+def punct (n : ℕ) : Set (Space n) := {y | y ≠ 0}
+
+theorem isOpen_punct : IsOpen (punct n) := isOpen_ne
+
+theorem uniqueDiffOn_punct : UniqueDiffOn ℝ (punct n) := isOpen_punct.uniqueDiffOn
+
+/-- Homogeneity bound: a function that is `C²` away from `0` and positively homogeneous of
+degree `a` has `k`-th derivative bounded by `M ‖y‖ ^ (a - k)`. -/
+theorem homog_bound {F : Type*} [NormedAddCommGroup F] [NormedSpace ℝ F]
+    (f : Space n → F) (a : ℤ) (hf : ContDiffOn ℝ 2 f (punct n))
+    (hhom : ∀ t : ℝ, 0 < t → ∀ y : Space n, y ≠ 0 → f (t • y) = (t ^ a) • f y)
+    {k : ℕ} (hk : k ≤ 2) :
+    ∃ M : ℝ, 0 ≤ M ∧ ∀ y : Space n, y ≠ 0 →
+      ‖iteratedFDerivWithin ℝ k f (punct n) y‖ ≤ M * ‖y‖ ^ (a - k) := by
+  have hk' : (k : ℕ∞ω) ≤ 2 := by exact_mod_cast hk
+  have hsph : Metric.sphere (0 : Space n) 1 ⊆ punct n := by
+    intro z hz
+    have hz1 : ‖z‖ = 1 := by simpa using hz
+    intro h
+    rw [h, norm_zero] at hz1
+    exact zero_ne_one hz1
+  have hcont : ContinuousOn (iteratedFDerivWithin ℝ k f (punct n))
+      (Metric.sphere (0 : Space n) 1) :=
+    (hf.continuousOn_iteratedFDerivWithin hk' uniqueDiffOn_punct).mono hsph
+  obtain ⟨M, hM⟩ := (isCompact_sphere (0 : Space n) 1).exists_bound_of_continuousOn hcont
+  refine ⟨max M 0, le_max_right _ _, fun y hy => ?_⟩
+  have ht : 0 < ‖y‖ := norm_pos_iff.mpr hy
+  set t : ℝ := ‖y‖ with ht_def
+  set u : Space n := t⁻¹ • y with hu_def
+  have hu1 : ‖u‖ = 1 := by
+    rw [hu_def, norm_smul, norm_inv, Real.norm_of_nonneg ht.le, inv_mul_cancel₀ ht.ne']
+  have hu0 : u ∈ punct n := by
+    intro h
+    rw [h, norm_zero] at hu1
+    exact zero_ne_one hu1
+  set L : Space n →L[ℝ] Space n := t • ContinuousLinearMap.id ℝ (Space n) with hL_def
+  have hLz : ∀ z, L z = t • z := fun z => rfl
+  have hLu : L u = y := by
+    rw [hLz, hu_def, smul_smul, mul_inv_cancel₀ ht.ne', one_smul]
+  have hpre : L ⁻¹' (punct n) = punct n := by
+    ext z
+    simp only [Set.mem_preimage, punct, Set.mem_ofPred_eq, hLz]
+    exact smul_ne_zero_iff_right ht.ne'
+  have h1 := L.iteratedFDerivWithin_comp_right hf uniqueDiffOn_punct
+    (by rw [hpre]; exact uniqueDiffOn_punct) (x := u) (by rw [hLu]; exact hy) hk'
+  rw [hpre, hLu] at h1
+  have h2 : iteratedFDerivWithin ℝ k (f ∘ L) (punct n) u
+      = (t ^ a) • iteratedFDerivWithin ℝ k f (punct n) u := by
+    rw [iteratedFDerivWithin_congr (f := (t ^ a) • f) (fun z hz => ?_) hu0 k]
+    · exact iteratedFDerivWithin_const_smul_apply ((hf u hu0).of_le hk') uniqueDiffOn_punct hu0
+    · simp only [Function.comp_apply, Pi.smul_apply, hLz]
+      exact hhom t ht z hz
+  have h3 : (iteratedFDerivWithin ℝ k f (punct n) y).compContinuousLinearMap (fun _ => L)
+      = (t ^ k) • iteratedFDerivWithin ℝ k f (punct n) y := by
+    ext m
+    simp only [ContinuousMultilinearMap.compContinuousLinearMap_apply, hLz,
+      smul_apply]
+    rw [ContinuousMultilinearMap.map_smul_univ]
+    simp [Finset.prod_const]
+  rw [h3, h2] at h1
+  have hn := congrArg norm h1
+  rw [norm_smul, norm_smul, Real.norm_of_nonneg (by positivity),
+    Real.norm_of_nonneg (by positivity)] at hn
+  have hMu : ‖iteratedFDerivWithin ℝ k f (punct n) u‖ ≤ max M 0 :=
+    (hM u (mem_sphere_zero_iff_norm.mpr hu1)).trans (le_max_left _ _)
+  have htk : 0 < t ^ k := pow_pos ht k
+  have hta : 0 < t ^ a := zpow_pos ht a
+  have hy' : ‖iteratedFDerivWithin ℝ k f (punct n) y‖
+      = ‖iteratedFDerivWithin ℝ k f (punct n) u‖ * (t ^ a / t ^ k) := by
+    field_simp
+    linarith
+  rw [hy', zpow_sub₀ ht.ne', zpow_natCast]
+  exact mul_le_mul_of_nonneg_right hMu (by positivity)
+
+/-- `Φ` is positively homogeneous of degree `-1`. -/
+theorem invMap_smul {t : ℝ} (ht : 0 < t) (y : Space n) :
+    invMap (t • y) = (t ^ (-1 : ℤ)) • invMap y := by
+  have ht0 : t ≠ 0 := ht.ne'
+  simp only [invMap, norm_smul, Real.norm_of_nonneg ht.le, smul_smul, zpow_neg, zpow_one]
+  congr 1
+  have e : ((t * ‖y‖) ^ 2)⁻¹ * t = t⁻¹ * (‖y‖ ^ 2)⁻¹ * (t * t⁻¹) := by
+    rw [mul_pow, mul_inv]
+    ring
+  rw [e, mul_inv_cancel₀ ht0, mul_one]
+
+/-- `ℛ` is positively homogeneous of degree `0`. -/
+theorem refl_smul {t : ℝ} (ht : 0 < t) (y : Space n) :
+    refl (t • y) = (t ^ (0 : ℤ)) • refl y := by
+  have ht0 : t ≠ 0 := ht.ne'
+  rw [zpow_zero, one_smul]
+  refine ContinuousLinearMap.ext fun ξ => ?_
+  rw [refl_apply, refl_apply, norm_smul, Real.norm_of_nonneg ht.le, real_inner_smul_left,
+    smul_smul]
+  congr 2
+  have e2 : (t ^ 2)⁻¹ * t * t = 1 := by field_simp
+  calc 2 * ((t * ‖y‖) ^ 2)⁻¹ * (t * ⟪y, ξ⟫_ℝ) * t
+      = 2 * (‖y‖ ^ 2)⁻¹ * ⟪y, ξ⟫_ℝ * ((t ^ 2)⁻¹ * t * t) := by
+        rw [mul_pow, mul_inv]
+        ring
+    _ = 2 * (‖y‖ ^ 2)⁻¹ * ⟪y, ξ⟫_ℝ := by rw [e2, mul_one]
+
+/-- `ℛ` is `C²` away from `0`. -/
+theorem contDiffAt_refl {y : Space n} (hy : y ≠ 0) :
+    ContDiffAt ℝ 2 (refl : Space n → Space n →L[ℝ] Space n) y := by
+  have h2 : ‖y‖ ^ 2 ≠ 0 := by positivity
+  have hs : ContDiffAt ℝ 2 (fun x : Space n => 2 * (‖x‖ ^ 2)⁻¹) y :=
+    contDiffAt_const.mul ((contDiff_norm_sq ℝ).contDiffAt.inv h2)
+  have hi : ContDiffAt ℝ 2 (fun x : Space n => (innerSL ℝ x).smulRight x) y :=
+    ((innerSL ℝ : Space n →L[ℝ] Space n →L[ℝ] ℝ).contDiff.contDiffAt).smulRight contDiffAt_id
+  exact contDiffAt_const.sub (hs.smul hi)
+
+theorem contDiffOn_refl : ContDiffOn ℝ 2 (refl : Space n → Space n →L[ℝ] Space n) (punct n) :=
+  fun _ hy => (contDiffAt_refl hy).contDiffWithinAt
+
+theorem contDiffOn_invMap : ContDiffOn ℝ 2 (invMap : Space n → Space n) (punct n) :=
+  fun _ hy => (contDiffAt_invMap hy).contDiffWithinAt
+
+/-- Derivative bounds for the inversion: `‖DΦ‖ ≤ M ‖y‖⁻²`, `‖D²Φ‖ ≤ M ‖y‖⁻³`. -/
+theorem invMap_bounds : ∃ M : ℝ, 0 ≤ M ∧ ∀ y : Space n, y ≠ 0 →
+    ‖iteratedFDerivWithin ℝ 1 invMap (punct n) y‖ ≤ M * ‖y‖⁻¹ ^ 2 ∧
+    ‖iteratedFDerivWithin ℝ 2 invMap (punct n) y‖ ≤ M * ‖y‖⁻¹ ^ 3 := by
+  have hhom : ∀ t : ℝ, 0 < t → ∀ y : Space n, y ≠ 0 →
+      invMap (t • y) = (t ^ (-1 : ℤ)) • invMap y := fun t ht y _ => invMap_smul ht y
+  obtain ⟨M1, hM1, h1⟩ := homog_bound invMap (-1) contDiffOn_invMap hhom (k := 1) (by norm_num)
+  obtain ⟨M2, hM2, h2⟩ := homog_bound invMap (-1) contDiffOn_invMap hhom (k := 2) le_rfl
+  refine ⟨max M1 M2, le_max_of_le_left hM1, fun y hy => ⟨?_, ?_⟩⟩
+  · have h := h1 y hy
+    have e : ‖y‖ ^ ((-1 : ℤ) - ((1 : ℕ) : ℤ)) = ‖y‖⁻¹ ^ 2 := by
+      rw [show (-1 : ℤ) - ((1 : ℕ) : ℤ) = -((2 : ℕ) : ℤ) by norm_num, zpow_neg, zpow_natCast,
+        inv_pow]
+    rw [e] at h
+    exact h.trans (mul_le_mul_of_nonneg_right (le_max_left _ _) (by positivity))
+  · have h := h2 y hy
+    have e : ‖y‖ ^ ((-1 : ℤ) - ((2 : ℕ) : ℤ)) = ‖y‖⁻¹ ^ 3 := by
+      rw [show (-1 : ℤ) - ((2 : ℕ) : ℤ) = -((3 : ℕ) : ℤ) by norm_num, zpow_neg, zpow_natCast,
+        inv_pow]
+    rw [e] at h
+    exact h.trans (mul_le_mul_of_nonneg_right (le_max_right _ _) (by positivity))
+
+/-- Derivative bounds for the reflection: `‖ℛ‖ ≤ 1`, `‖Dℛ‖ ≤ M ‖y‖⁻¹`, `‖D²ℛ‖ ≤ M ‖y‖⁻²`. -/
+theorem refl_bounds : ∃ M : ℝ, 0 ≤ M ∧ ∀ y : Space n, y ≠ 0 →
+    ‖iteratedFDerivWithin ℝ 0 refl (punct n) y‖ ≤ 1 ∧
+    ‖iteratedFDerivWithin ℝ 1 refl (punct n) y‖ ≤ M * ‖y‖⁻¹ ∧
+    ‖iteratedFDerivWithin ℝ 2 refl (punct n) y‖ ≤ M * ‖y‖⁻¹ ^ 2 := by
+  have hhom : ∀ t : ℝ, 0 < t → ∀ y : Space n, y ≠ 0 →
+      refl (t • y) = (t ^ (0 : ℤ)) • refl y := fun t ht y _ => refl_smul ht y
+  obtain ⟨M1, hM1, h1⟩ := homog_bound refl 0 contDiffOn_refl hhom (k := 1) (by norm_num)
+  obtain ⟨M2, hM2, h2⟩ := homog_bound refl 0 contDiffOn_refl hhom (k := 2) le_rfl
+  refine ⟨max M1 M2, le_max_of_le_left hM1, fun y hy => ⟨?_, ?_, ?_⟩⟩
+  · rw [norm_iteratedFDerivWithin_zero]
+    exact norm_refl_le hy
+  · have h := h1 y hy
+    have e : ‖y‖ ^ ((0 : ℤ) - ((1 : ℕ) : ℤ)) = ‖y‖⁻¹ := by
+      rw [show (0 : ℤ) - ((1 : ℕ) : ℤ) = -1 by norm_num, zpow_neg_one]
+    rw [e] at h
+    exact h.trans (mul_le_mul_of_nonneg_right (le_max_left _ _) (by positivity))
+  · have h := h2 y hy
+    have e : ‖y‖ ^ ((0 : ℤ) - ((2 : ℕ) : ℤ)) = ‖y‖⁻¹ ^ 2 := by
+      rw [show (0 : ℤ) - ((2 : ℕ) : ℤ) = -((2 : ℕ) : ℤ) by norm_num, zpow_neg, zpow_natCast,
+        inv_pow]
+    rw [e] at h
+    exact h.trans (mul_le_mul_of_nonneg_right (le_max_right _ _) (by positivity))
+
+/-- The perturbation `E = A ∘ Φ - I`. -/
+noncomputable def Ef (S : HalfBallSolution n) (y : Space n) : Space n →L[ℝ] Space n :=
+  S.A (invMap y) - ContinuousLinearMap.id ℝ (Space n)
+
+theorem contDiffOn_Ef (S : HalfBallSolution n) : ContDiffOn ℝ 2 (Ef S) (punct n) := by
+  exact (S.coeffs.contDiff_A.comp_contDiffOn contDiffOn_invMap).sub contDiffOn_const
+
+/-- Bounds for `E = A ∘ Φ - I` and its first two derivatives, for `‖y‖ ≥ 1`. -/
+theorem Ef_bounds (S : HalfBallSolution n) : ∃ M : ℝ, 0 ≤ M ∧ ∀ y : Space n, 1 ≤ ‖y‖ →
+    ‖iteratedFDerivWithin ℝ 0 (Ef S) (punct n) y‖ ≤ M * ‖y‖⁻¹ ∧
+    ‖iteratedFDerivWithin ℝ 1 (Ef S) (punct n) y‖ ≤ M * ‖y‖⁻¹ ^ 2 ∧
+    ‖iteratedFDerivWithin ℝ 2 (Ef S) (punct n) y‖ ≤ M * ‖y‖⁻¹ ^ 3 := by
+  obtain ⟨MΦ, hMΦ, hΦ⟩ := invMap_bounds (n := n)
+  have hK : 0 ≤ S.K := (norm_nonneg _).trans (S.coeffs.bound_A 0)
+  refine ⟨S.K * MΦ + 2 * S.K * (MΦ + 1) ^ 2 + S.K, by positivity, fun y hy => ?_⟩
+  have hy0 : y ≠ 0 := by
+    intro h
+    rw [h, norm_zero] at hy
+    exact absurd hy (by norm_num)
+  have hyp : y ∈ punct n := hy0
+  have hρ0 : 0 < ‖y‖⁻¹ := inv_pos.mpr (norm_pos_iff.mpr hy0)
+  have hρ1 : ‖y‖⁻¹ ≤ 1 := inv_le_one_of_one_le₀ hy
+  obtain ⟨hΦ1, hΦ2⟩ := hΦ y hy0
+  have hAΦ : ContDiffOn ℝ 2 (S.A ∘ invMap) (punct n) :=
+    S.coeffs.contDiff_A.comp_contDiffOn contDiffOn_invMap
+  -- the derivatives of `E` are those of `A ∘ Φ`
+  have hEq : ∀ k : ℕ, k ≠ 0 → k ≤ 2 → iteratedFDerivWithin ℝ k (Ef S) (punct n) y
+      = iteratedFDerivWithin ℝ k (S.A ∘ invMap) (punct n) y := by
+    intro k hk hk2
+    have e : Ef S = (S.A ∘ invMap) - fun _ => ContinuousLinearMap.id ℝ (Space n) := rfl
+    rw [e, iteratedFDerivWithin_sub_apply ((hAΦ y hyp).of_le (by exact_mod_cast hk2))
+      contDiffWithinAt_const uniqueDiffOn_punct hyp, iteratedFDerivWithin_const_of_ne hk,
+      Pi.zero_apply, sub_zero]
+  -- the derivatives of `A` are bounded by `K`
+  have hA : ∀ i : ℕ, i ≤ 2 → ‖iteratedFDerivWithin ℝ i S.A Set.univ (invMap y)‖ ≤ S.K := by
+    intro i hi
+    rw [iteratedFDerivWithin_univ]
+    interval_cases i
+    · rw [norm_iteratedFDeriv_zero]
+      exact S.coeffs.bound_A _
+    · rw [norm_iteratedFDeriv_one]
+      exact S.coeffs.bound_dA _
+    · exact S.coeffs.bound_d2A _
+  refine ⟨?_, ?_, ?_⟩
+  · -- `‖E y‖ ≤ K / ‖y‖` by the mean value theorem, since `A 0 = I`
+    rw [norm_iteratedFDerivWithin_zero]
+    have h := Convex.norm_image_sub_le_of_norm_fderiv_le (𝕜 := ℝ) (f := S.A) (s := Set.univ)
+      (x := 0) (y := invMap y)
+      (fun x _ => (S.coeffs.contDiff_A.differentiable (by norm_num)) x)
+      (fun x _ => S.coeffs.bound_dA x) convex_univ trivial trivial
+    rw [S.A_zero, sub_zero, norm_invMap] at h
+    calc ‖Ef S y‖ ≤ S.K * ‖y‖⁻¹ := h
+      _ ≤ (S.K * MΦ + 2 * S.K * (MΦ + 1) ^ 2 + S.K) * ‖y‖⁻¹ := by
+        gcongr
+        nlinarith [mul_nonneg hK hMΦ, mul_nonneg hK (sq_nonneg (MΦ + 1))]
+  · rw [hEq 1 one_ne_zero (by norm_num)]
+    have h := norm_iteratedFDerivWithin_comp_le (g := S.A) (f := invMap) (s := punct n)
+      (t := Set.univ) (x := y) (n := 1) (N := 2) S.coeffs.contDiff_A.contDiffOn contDiffOn_invMap
+      (by norm_num) uniqueDiffOn_univ uniqueDiffOn_punct (Set.mapsTo_univ _ _) hyp
+      (C := S.K) (D := MΦ * ‖y‖⁻¹ ^ 2) (fun i hi => hA i (by omega)) (fun i hi1 hi2 => by
+        have : i = 1 := by omega
+        subst this
+        rw [pow_one]
+        exact hΦ1)
+    calc _ ≤ _ := h
+      _ = S.K * MΦ * ‖y‖⁻¹ ^ 2 := by
+        simp only [Nat.factorial_one, Nat.cast_one, one_mul, pow_one]
+        ring
+      _ ≤ (S.K * MΦ + 2 * S.K * (MΦ + 1) ^ 2 + S.K) * ‖y‖⁻¹ ^ 2 := by
+        gcongr
+        nlinarith [mul_nonneg hK hMΦ, mul_nonneg hK (sq_nonneg (MΦ + 1))]
+  · rw [hEq 2 two_ne_zero le_rfl]
+    have hsq : Real.sqrt ‖y‖⁻¹ ^ 2 = ‖y‖⁻¹ := Real.sq_sqrt hρ0.le
+    have hρs : ‖y‖⁻¹ ≤ Real.sqrt ‖y‖⁻¹ := by
+      have h1 : ‖y‖⁻¹ ^ 2 ≤ ‖y‖⁻¹ := by nlinarith
+      calc ‖y‖⁻¹ = Real.sqrt (‖y‖⁻¹ ^ 2) := (Real.sqrt_sq hρ0.le).symm
+        _ ≤ Real.sqrt ‖y‖⁻¹ := Real.sqrt_le_sqrt h1
+    have hs0 : 0 ≤ Real.sqrt ‖y‖⁻¹ := Real.sqrt_nonneg _
+    have h := norm_iteratedFDerivWithin_comp_le (g := S.A) (f := invMap) (s := punct n)
+      (t := Set.univ) (x := y) (n := 2) (N := 2) S.coeffs.contDiff_A.contDiffOn contDiffOn_invMap
+      le_rfl uniqueDiffOn_univ uniqueDiffOn_punct (Set.mapsTo_univ _ _) hyp
+      (C := S.K) (D := (MΦ + 1) * ‖y‖⁻¹ * Real.sqrt ‖y‖⁻¹) (fun i hi => hA i hi)
+      (fun i hi1 hi2 => by
+        interval_cases i
+        · rw [pow_one]
+          calc ‖iteratedFDerivWithin ℝ 1 invMap (punct n) y‖ ≤ MΦ * ‖y‖⁻¹ ^ 2 := hΦ1
+            _ = MΦ * ‖y‖⁻¹ * ‖y‖⁻¹ := by ring
+            _ ≤ (MΦ + 1) * ‖y‖⁻¹ * Real.sqrt ‖y‖⁻¹ := by
+              gcongr
+              linarith
+        · calc ‖iteratedFDerivWithin ℝ 2 invMap (punct n) y‖ ≤ MΦ * ‖y‖⁻¹ ^ 3 := hΦ2
+            _ ≤ (MΦ + 1) ^ 2 * ‖y‖⁻¹ ^ 3 := by
+              gcongr
+              nlinarith
+            _ = ((MΦ + 1) * ‖y‖⁻¹ * Real.sqrt ‖y‖⁻¹) ^ 2 := by
+              rw [mul_pow, mul_pow, hsq]
+              ring)
+    calc _ ≤ _ := h
+      _ = 2 * S.K * (MΦ + 1) ^ 2 * ‖y‖⁻¹ ^ 3 := by
+        rw [mul_pow, mul_pow, hsq]
+        norm_num
+        ring
+      _ ≤ (S.K * MΦ + 2 * S.K * (MΦ + 1) ^ 2 + S.K) * ‖y‖⁻¹ ^ 3 := by
+        gcongr
+        nlinarith [mul_nonneg hK hMΦ, mul_nonneg hK (sq_nonneg (MΦ + 1))]
+
+/-- Leibniz bounds for a composition of operator-valued maps, up to order 2. -/
+theorem comp_bounds {s : Set (Space n)} (hs : UniqueDiffOn ℝ s) {x : Space n} (hx : x ∈ s)
+    {f g : Space n → (Space n →L[ℝ] Space n)} (hf : ContDiffOn ℝ 2 f s)
+    (hg : ContDiffOn ℝ 2 g s) {a0 a1 a2 b0 b1 b2 : ℝ}
+    (hf0 : ‖iteratedFDerivWithin ℝ 0 f s x‖ ≤ a0) (hf1 : ‖iteratedFDerivWithin ℝ 1 f s x‖ ≤ a1)
+    (hf2 : ‖iteratedFDerivWithin ℝ 2 f s x‖ ≤ a2)
+    (hg0 : ‖iteratedFDerivWithin ℝ 0 g s x‖ ≤ b0) (hg1 : ‖iteratedFDerivWithin ℝ 1 g s x‖ ≤ b1)
+    (hg2 : ‖iteratedFDerivWithin ℝ 2 g s x‖ ≤ b2) :
+    ‖iteratedFDerivWithin ℝ 0 (fun y => f y ∘L g y) s x‖ ≤ a0 * b0 ∧
+    ‖iteratedFDerivWithin ℝ 1 (fun y => f y ∘L g y) s x‖ ≤ a0 * b1 + a1 * b0 ∧
+    ‖iteratedFDerivWithin ℝ 2 (fun y => f y ∘L g y) s x‖ ≤
+      a0 * b2 + 2 * (a1 * b1) + a2 * b0 := by
+  have key : ∀ k : ℕ, k ≤ 2 → ‖iteratedFDerivWithin ℝ k (fun y => f y ∘L g y) s x‖ ≤
+      ∑ i ∈ Finset.range (k + 1), (k.choose i : ℝ) * ‖iteratedFDerivWithin ℝ i f s x‖ *
+        ‖iteratedFDerivWithin ℝ (k - i) g s x‖ := fun k hk =>
+    (ContinuousLinearMap.compL ℝ (Space n) (Space n) (Space n)).norm_iteratedFDerivWithin_le_of_bilinear_of_le_one
+      hf hg hs hx (by exact_mod_cast hk) (ContinuousLinearMap.norm_compL_le _ _ _ _)
+  have a0n : 0 ≤ a0 := (norm_nonneg _).trans hf0
+  have a1n : 0 ≤ a1 := (norm_nonneg _).trans hf1
+  have a2n : 0 ≤ a2 := (norm_nonneg _).trans hf2
+  have k0 : ‖iteratedFDerivWithin ℝ 0 (fun y => f y ∘L g y) s x‖ ≤
+      ‖iteratedFDerivWithin ℝ 0 f s x‖ * ‖iteratedFDerivWithin ℝ 0 g s x‖ := by
+    have := key 0 (by norm_num)
+    simp only [Finset.sum_range_succ, Finset.sum_range_zero, zero_add, Nat.choose_self,
+      Nat.cast_one, one_mul] at this
+    exact this
+  have k1 : ‖iteratedFDerivWithin ℝ 1 (fun y => f y ∘L g y) s x‖ ≤
+      ‖iteratedFDerivWithin ℝ 0 f s x‖ * ‖iteratedFDerivWithin ℝ 1 g s x‖ +
+      ‖iteratedFDerivWithin ℝ 1 f s x‖ * ‖iteratedFDerivWithin ℝ 0 g s x‖ := by
+    have := key 1 (by norm_num)
+    simp only [Finset.sum_range_succ, Finset.sum_range_zero, zero_add, Nat.choose_self,
+      Nat.choose_zero_right, Nat.cast_one, one_mul] at this
+    exact this
+  have k2 : ‖iteratedFDerivWithin ℝ 2 (fun y => f y ∘L g y) s x‖ ≤
+      ‖iteratedFDerivWithin ℝ 0 f s x‖ * ‖iteratedFDerivWithin ℝ 2 g s x‖ +
+      2 * ‖iteratedFDerivWithin ℝ 1 f s x‖ * ‖iteratedFDerivWithin ℝ 1 g s x‖ +
+      ‖iteratedFDerivWithin ℝ 2 f s x‖ * ‖iteratedFDerivWithin ℝ 0 g s x‖ := by
+    have := key 2 le_rfl
+    simp only [Finset.sum_range_succ, Finset.sum_range_zero, zero_add, Nat.choose_self,
+      Nat.choose_zero_right, Nat.choose_one_right, Nat.cast_one, one_mul,
+      Nat.cast_ofNat] at this
+    exact this
+  have p00 := mul_le_mul hf0 hg0 (norm_nonneg _) a0n
+  have p01 := mul_le_mul hf0 hg1 (norm_nonneg _) a0n
+  have p02 := mul_le_mul hf0 hg2 (norm_nonneg _) a0n
+  have p10 := mul_le_mul hf1 hg0 (norm_nonneg _) a1n
+  have p11 := mul_le_mul hf1 hg1 (norm_nonneg _) a1n
+  have p20 := mul_le_mul hf2 hg0 (norm_nonneg _) a2n
+  refine ⟨by linarith, by linarith, by linarith⟩
+
+/-- `G = ℛ E ℛ`, so that `Ã = G + I` away from `0`. -/
+noncomputable def Gf (S : HalfBallSolution n) (y : Space n) : Space n →L[ℝ] Space n :=
+  refl y ∘L (Ef S y ∘L refl y)
+
+theorem contDiffOn_Gf (S : HalfBallSolution n) : ContDiffOn ℝ 2 (Gf S) (punct n) :=
+  contDiffOn_refl.clm_comp ((contDiffOn_Ef S).clm_comp contDiffOn_refl)
+
+theorem Gf_bounds (S : HalfBallSolution n) : ∃ M : ℝ, 0 ≤ M ∧ ∀ y : Space n, 1 ≤ ‖y‖ →
+    ‖iteratedFDerivWithin ℝ 1 (Gf S) (punct n) y‖ ≤ M * ‖y‖⁻¹ ^ 2 ∧
+    ‖iteratedFDerivWithin ℝ 2 (Gf S) (punct n) y‖ ≤ M * ‖y‖⁻¹ ^ 3 := by
+  obtain ⟨MR, hMR, hR⟩ := refl_bounds (n := n)
+  obtain ⟨ME, hME, hE⟩ := Ef_bounds S
+  refine ⟨9 * (MR + ME + 1) ^ 3, by positivity, fun y hy => ?_⟩
+  set M : ℝ := MR + ME + 1 with hM_def
+  have hM1 : 1 ≤ M := by linarith
+  have hy0 : y ≠ 0 := by
+    intro h
+    rw [h, norm_zero] at hy
+    exact absurd hy (by norm_num)
+  have hyp : y ∈ punct n := hy0
+  set ρ : ℝ := ‖y‖⁻¹ with hρ_def
+  have hρ0 : 0 ≤ ρ := inv_nonneg.mpr (norm_nonneg _)
+  obtain ⟨hR0, hR1, hR2⟩ := hR y hy0
+  obtain ⟨hE0, hE1, hE2⟩ := hE y hy
+  have hR1' : ‖iteratedFDerivWithin ℝ 1 refl (punct n) y‖ ≤ M * ρ :=
+    hR1.trans (mul_le_mul_of_nonneg_right (by linarith) hρ0)
+  have hR2' : ‖iteratedFDerivWithin ℝ 2 refl (punct n) y‖ ≤ M * ρ ^ 2 :=
+    hR2.trans (mul_le_mul_of_nonneg_right (by linarith) (by positivity))
+  have hE0' : ‖iteratedFDerivWithin ℝ 0 (Ef S) (punct n) y‖ ≤ M * ρ :=
+    hE0.trans (mul_le_mul_of_nonneg_right (by linarith) hρ0)
+  have hE1' : ‖iteratedFDerivWithin ℝ 1 (Ef S) (punct n) y‖ ≤ M * ρ ^ 2 :=
+    hE1.trans (mul_le_mul_of_nonneg_right (by linarith) (by positivity))
+  have hE2' : ‖iteratedFDerivWithin ℝ 2 (Ef S) (punct n) y‖ ≤ M * ρ ^ 3 :=
+    hE2.trans (mul_le_mul_of_nonneg_right (by linarith) (by positivity))
+  -- `H = E ℛ`
+  obtain ⟨hH0, hH1, hH2⟩ := comp_bounds uniqueDiffOn_punct hyp (contDiffOn_Ef S) contDiffOn_refl
+    hE0' hE1' hE2' hR0 hR1' hR2'
+  -- `G = ℛ H`
+  obtain ⟨-, hG1, hG2⟩ := comp_bounds uniqueDiffOn_punct hyp contDiffOn_refl
+    ((contDiffOn_Ef S).clm_comp contDiffOn_refl) hR0 hR1' hR2' hH0 hH1 hH2
+  have hMM : M ≤ M ^ 2 := by nlinarith
+  have hMMM : M ^ 2 ≤ M ^ 3 := by nlinarith
+  constructor
+  · refine hG1.trans ?_
+    calc 1 * (M * ρ * (M * ρ) + M * ρ ^ 2 * 1) + M * ρ * (M * ρ * 1)
+        = (2 * M ^ 2 + M) * ρ ^ 2 := by ring
+      _ ≤ (9 * M ^ 3) * ρ ^ 2 := by
+        gcongr
+        nlinarith
+  · refine hG2.trans ?_
+    calc 1 * (M * ρ * (M * ρ ^ 2) + 2 * (M * ρ ^ 2 * (M * ρ)) + M * ρ ^ 3 * 1) +
+          2 * (M * ρ * (M * ρ * (M * ρ) + M * ρ ^ 2 * 1)) + M * ρ ^ 2 * (M * ρ * 1)
+        = (2 * M ^ 3 + 6 * M ^ 2 + M) * ρ ^ 3 := by ring
+      _ ≤ (9 * M ^ 3) * ρ ^ 3 := by
+        gcongr
+        nlinarith
+
+/-- `Ã = ℛ E ℛ + I` away from `0` (from `tA_sub_id`). -/
+theorem tA_eq_Gf (S : HalfBallSolution n) {y : Space n} (hy : y ≠ 0) :
+    tA S.A y = Gf S y + ContinuousLinearMap.id ℝ (Space n) := by
+  rw [Gf, Ef, ← tA_sub_id hy, sub_add_cancel]
+
+/-- For `k = 1, 2` the `k`-th derivative of `Ã` at `y ≠ 0` has the norm of that of `ℛ E ℛ`. -/
+theorem norm_iteratedFDeriv_tA (S : HalfBallSolution n) {k : ℕ} (hk : k ≠ 0) (hk2 : k ≤ 2)
+    {y : Space n} (hy : y ≠ 0) :
+    ‖iteratedFDeriv ℝ k (tA S.A) y‖ = ‖iteratedFDerivWithin ℝ k (Gf S) (punct n) y‖ := by
+  have hy' : y ∈ punct n := hy
+  rw [← iteratedFDerivWithin_of_isOpen k isOpen_punct hy',
+    iteratedFDerivWithin_congr (f := Gf S + fun _ => ContinuousLinearMap.id ℝ (Space n))
+      (fun z hz => tA_eq_Gf S hz) hy' k,
+    iteratedFDerivWithin_add_apply ((contDiffOn_Gf S y hy').of_le (by exact_mod_cast hk2))
+      contDiffWithinAt_const uniqueDiffOn_punct hy',
+    iteratedFDerivWithin_const_of_ne hk, Pi.zero_apply, add_zero]
+
+end W_PL_tA
+
 /-- The derivative bounds `|∇Ã| ≤ K/|y|²`, `|∇²Ã| ≤ K/|y|³` of Lemma inversion. Write
 `Ã - I = ℛ E ℛ` with `E = A ∘ Φ - I` (`tA_sub_id`; this uses `ℛ ∘ ℛ = I`) and apply Leibniz:
 every term is small because `|ℛ| ≤ 1`, `|E| ≤ K/|y|` (see `coeff_bounds`),
@@ -460,7 +875,19 @@ every term is small because `|ℛ| ≤ 1`, `|E| ≤ K/|y|` (see `coeff_bounds`),
 `|D²ℛ| ≤ C/|y|²` (`ℛ` is homogeneous of degree `0`, `Φ` of degree `-1`). -/
 theorem tA_deriv_bounds (S : HalfBallSolution n) : ∃ K₁ : ℝ, 0 ≤ K₁ ∧ ∀ y : Space n, 1 ≤ ‖y‖ →
     ‖fderiv ℝ (tA S.A) y‖ ≤ K₁ / ‖y‖ ^ 2 ∧ ‖iteratedFDeriv ℝ 2 (tA S.A) y‖ ≤ K₁ / ‖y‖ ^ 3 := by
-  sorry
+  obtain ⟨M, hM0, hM⟩ := W_PL_tA.Gf_bounds S
+  refine ⟨M, hM0, fun y hy => ?_⟩
+  have hy0 : y ≠ 0 := by
+    intro h
+    rw [h, norm_zero] at hy
+    exact absurd hy (by norm_num)
+  obtain ⟨h1, h2⟩ := hM y hy
+  constructor
+  · rw [← norm_iteratedFDeriv_one, W_PL_tA.norm_iteratedFDeriv_tA S one_ne_zero (by norm_num) hy0,
+      div_eq_mul_inv, ← inv_pow]
+    exact h1
+  · rw [W_PL_tA.norm_iteratedFDeriv_tA S two_ne_zero le_rfl hy0, div_eq_mul_inv, ← inv_pow]
+    exact h2
 
 /-- Regularity and size bounds of the transformed coefficients on `{‖y‖ ≥ 1}` (Lemma inversion). -/
 theorem coeff_bounds (S : HalfBallSolution n) : ∃ K' : ℝ, 0 ≤ K' ∧ ∀ y : Space n, 1 ≤ ‖y‖ →
@@ -713,6 +1140,1114 @@ theorem continuousOn_inv_sq {l : ℝ} (hl : 0 ≤ l) :
 
 /-! ### The half-space Carleman estimate (Proposition carleman) -/
 
+namespace W_PL_carleman
+
+/-! ### Helpers for `carleman_P0` (Proposition carleman of the note)
+
+Notation: `e = ed n`, `s = vcoord y`, `φ = phi C₀ = gw C₀ ∘ vcoord`; `g1, g2, g3` are the first
+three derivatives of `gw C₀`. We use the identities of package F2 with the trivial density
+`μ = 1`, `B = A`, and the conjugate `w = e^{τφ} v` (`wc`). -/
+
+/-- `g'(s) = 1 - C₀/s`. -/
+noncomputable def g1 (C₀ s : ℝ) : ℝ := 1 - C₀ / s
+
+/-- `g''(s) = C₀/s²`. -/
+noncomputable def g2 (C₀ s : ℝ) : ℝ := C₀ / s ^ 2
+
+/-- `g'''(s) = -2C₀/s³`. -/
+noncomputable def g3 (C₀ s : ℝ) : ℝ := -(2 * C₀) / s ^ 3
+
+/-- The weight `φ(y) = g(y_d)`. -/
+noncomputable def phi (C₀ : ℝ) (y : Space n) : ℝ := gw C₀ (vcoord y)
+
+/-- The dimension `d = n + 1` (it bounds the trace: `|tr L| ≤ d ‖L‖`). -/
+noncomputable def trN (n : ℕ) : ℝ := (n : ℝ) + 1
+
+theorem trN_nonneg : 0 ≤ trN n := by
+  unfold trN
+  positivity
+
+/-- The constant `C♯ = 8K + 2‖tr‖ + 2` of the proof. -/
+noncomputable def Csh (n : ℕ) (K : ℝ) : ℝ := 8 * K + 2 * trN n + 2
+
+/-- The conjugate `w = e^{τφ} v`. -/
+noncomputable def wc (C₀ τ : ℝ) (v : Space n → ℝ) (z : Space n) : ℝ :=
+  Real.exp (τ * phi C₀ z) * v z
+
+/-- The field `s⁻² w A ∇w` of Lemma 2.1(3) with `ϱ = s⁻²` and `μ = 1` (the factor `1` is kept so
+that the field is syntactically the one of `F2.carleman_gradient_pointwise`). -/
+noncomputable def Gf (A : Space n → Space n →L[ℝ] Space n) (w : Space n → ℝ) (z : Space n) :
+    Space n :=
+  (1 * (vcoord z ^ 2)⁻¹ * w z) • A z (gradient w z)
+
+/-! #### One-variable calculus for the weight -/
+
+theorem hasDerivAt_gw (C₀ : ℝ) {s : ℝ} (hs : 0 < s) : HasDerivAt (gw C₀) (g1 C₀ s) s := by
+  have h : HasDerivAt (gw C₀) (1 - C₀ * s⁻¹) s :=
+    (hasDerivAt_id' s).sub ((Real.hasDerivAt_log hs.ne').const_mul C₀)
+  refine h.congr_deriv ?_
+  simp only [g1, div_eq_mul_inv]
+
+theorem hasDerivAt_g1 (C₀ : ℝ) {s : ℝ} (hs : 0 < s) : HasDerivAt (g1 C₀) (g2 C₀ s) s := by
+  have h := (hasDerivAt_const s (1 : ℝ)).sub ((hasDerivAt_inv hs.ne').const_mul C₀)
+  have e : g1 C₀ = (fun _ => (1 : ℝ)) - fun y => C₀ * y⁻¹ := by
+    funext x
+    simp [g1, div_eq_mul_inv]
+  rw [e]
+  refine h.congr_deriv ?_
+  simp only [g2]
+  field_simp
+  ring
+
+theorem hasDerivAt_g2 (C₀ : ℝ) {s : ℝ} (hs : 0 < s) : HasDerivAt (g2 C₀) (g3 C₀ s) s := by
+  have h := ((hasDerivAt_pow 2 s).inv (pow_ne_zero 2 hs.ne')).const_mul C₀
+  have e : g2 C₀ = fun y => C₀ * (fun x => x ^ 2)⁻¹ y := by
+    funext x
+    simp [g2, div_eq_mul_inv]
+  rw [e]
+  refine h.congr_deriv ?_
+  simp only [g3]
+  field_simp
+  ring
+
+/-! #### The vertical coordinate and the weight -/
+
+theorem vcoord_eq_inner (z : Space n) : vcoord z = ⟪ed n, z⟫_ℝ := by
+  rw [real_inner_comm, F1.inner_ed]
+  rfl
+
+theorem hasFDerivAt_vcoord (y : Space n) :
+    HasFDerivAt (vcoord : Space n → ℝ) (innerSL ℝ (ed n)) y := by
+  have h : (vcoord : Space n → ℝ) = fun z => innerSL ℝ (ed n) z := by
+    funext z
+    rw [innerSL_apply_apply, vcoord_eq_inner]
+  rw [h]
+  exact (innerSL ℝ (ed n)).hasFDerivAt
+
+theorem hasFDerivAt_comp_vcoord {f : ℝ → ℝ} {f' : ℝ} {y : Space n}
+    (hf : HasDerivAt f f' (vcoord y)) :
+    HasFDerivAt (fun z => f (vcoord z)) (f' • innerSL ℝ (ed n)) y :=
+  hf.comp_hasFDerivAt y (hasFDerivAt_vcoord y)
+
+theorem hasFDerivAt_phi (C₀ : ℝ) {y : Space n} (hy : 0 < vcoord y) :
+    HasFDerivAt (phi C₀) (g1 C₀ (vcoord y) • innerSL ℝ (ed n)) y :=
+  hasFDerivAt_comp_vcoord (hasDerivAt_gw C₀ hy)
+
+theorem gradient_phi (C₀ : ℝ) {y : Space n} (hy : 0 < vcoord y) :
+    gradient (phi C₀) y = g1 C₀ (vcoord y) • ed n := by
+  refine ext_inner_right ℝ fun ξ => ?_
+  rw [inner_gradient_left, (hasFDerivAt_phi C₀ hy).fderiv, real_inner_smul_left,
+    smul_apply, innerSL_apply_apply, smul_eq_mul]
+
+theorem contDiff_vcoord_any {k : WithTop ℕ∞} : ContDiff ℝ k (vcoord : Space n → ℝ) := by
+  rw [F1.vcoord_eq_proj]
+  exact (EuclideanSpace.proj (Fin.last n) : Space n →L[ℝ] ℝ).contDiff
+
+theorem contDiffAt_phi (C₀ : ℝ) {y : Space n} (hy : 0 < vcoord y) {k : WithTop ℕ∞} :
+    ContDiffAt ℝ k (phi C₀) y := by
+  have hv : ContDiffAt ℝ k (vcoord : Space n → ℝ) y := contDiff_vcoord_any.contDiffAt
+  have hl : ContDiffAt ℝ k (fun z : Space n => Real.log (vcoord z)) y :=
+    (Real.contDiffAt_log.mpr hy.ne').comp y hv
+  exact hv.sub (contDiffAt_const.mul hl)
+
+theorem contDiffAt_invsq {y : Space n} (hy : 0 < vcoord y) {k : WithTop ℕ∞} :
+    ContDiffAt ℝ k (fun z : Space n => (vcoord z ^ 2)⁻¹) y :=
+  (contDiff_vcoord_any.contDiffAt.pow 2).inv (pow_ne_zero 2 hy.ne')
+
+theorem contDiffAt_wc (C₀ τ : ℝ) {v : Space n → ℝ} (hv : ContDiff ℝ 2 v) {y : Space n}
+    (hy : 0 < vcoord y) : ContDiffAt ℝ 2 (wc C₀ τ v) y :=
+  ((contDiffAt_const.mul (contDiffAt_phi C₀ hy)).exp).mul hv.contDiffAt
+
+/-! #### Pointwise hypotheses -/
+
+/-- The hypotheses at a point `y` used by the pointwise estimates. -/
+structure PtHyp (A : Space n → Space n →L[ℝ] Space n) (K C₀ : ℝ) (y : Space n) : Prop where
+  hK : 0 ≤ K
+  hC₀ : 0 ≤ C₀
+  hs1 : 1 ≤ vcoord y
+  hsC : 4 * C₀ ≤ vcoord y
+  hsK : 4 * K ≤ vcoord y
+  cd : ContDiffAt ℝ 2 A y
+  symm : ∀ ξ η : Space n, ⟪A y ξ, η⟫_ℝ = ⟪ξ, A y η⟫_ℝ
+  bA : ‖A y - ContinuousLinearMap.id ℝ (Space n)‖ ≤ K / vcoord y
+  bdA : ‖fderiv ℝ A y‖ ≤ K / vcoord y ^ 2
+  bd2A : ‖iteratedFDeriv ℝ 2 A y‖ ≤ K / vcoord y ^ 3
+
+namespace PtHyp
+
+variable {A : Space n → Space n →L[ℝ] Space n} {K C₀ : ℝ} {y : Space n}
+
+theorem spos (h : PtHyp A K C₀ y) : 0 < vcoord y := lt_of_lt_of_le one_pos h.hs1
+
+theorem g1_ge (h : PtHyp A K C₀ y) : 3 / 4 ≤ g1 C₀ (vcoord y) := by
+  have hs := h.spos
+  have : C₀ / vcoord y ≤ 1 / 4 := by
+    rw [div_le_iff₀ hs]
+    linarith [h.hsC]
+  unfold g1
+  linarith
+
+theorem g1_le (h : PtHyp A K C₀ y) : g1 C₀ (vcoord y) ≤ 1 := by
+  have := div_nonneg h.hC₀ h.spos.le
+  unfold g1
+  linarith
+
+theorem g2_nonneg (h : PtHyp A K C₀ y) : 0 ≤ g2 C₀ (vcoord y) :=
+  div_nonneg h.hC₀ (by have := h.spos; positivity)
+
+theorem bA' (h : PtHyp A K C₀ y) : ‖A y - ContinuousLinearMap.id ℝ (Space n)‖ ≤ 1 / 4 := by
+  refine h.bA.trans ?_
+  rw [div_le_iff₀ h.spos]
+  linarith [h.hsK]
+
+theorem normA (h : PtHyp A K C₀ y) : ‖A y‖ ≤ 5 / 4 := by
+  have h1 : ‖A y‖ ≤ ‖A y - ContinuousLinearMap.id ℝ (Space n)‖
+      + ‖ContinuousLinearMap.id ℝ (Space n)‖ := by
+    have := norm_add_le (A y - ContinuousLinearMap.id ℝ (Space n))
+      (ContinuousLinearMap.id ℝ (Space n))
+    rwa [sub_add_cancel] at this
+  have h2 : ‖ContinuousLinearMap.id ℝ (Space n)‖ ≤ 1 := ContinuousLinearMap.norm_id_le
+  linarith [h.bA']
+
+theorem normAv (h : PtHyp A K C₀ y) (ξ : Space n) : ‖A y ξ‖ ≤ 5 / 4 * ‖ξ‖ :=
+  ((A y).le_opNorm ξ).trans (mul_le_mul_of_nonneg_right h.normA (norm_nonneg _))
+
+theorem coer (h : PtHyp A K C₀ y) (ξ : Space n) : 3 / 4 * ‖ξ‖ ^ 2 ≤ ⟪A y ξ, ξ⟫_ℝ := by
+  have e : ⟪A y ξ, ξ⟫_ℝ = ‖ξ‖ ^ 2 + ⟪(A y - ContinuousLinearMap.id ℝ (Space n)) ξ, ξ⟫_ℝ := by
+    rw [sub_apply, inner_sub_left, ContinuousLinearMap.id_apply,
+      real_inner_self_eq_norm_sq]
+    ring
+  have h1 : |⟪(A y - ContinuousLinearMap.id ℝ (Space n)) ξ, ξ⟫_ℝ| ≤ 1 / 4 * ‖ξ‖ ^ 2 := by
+    refine (abs_real_inner_le_norm _ _).trans ?_
+    have := ((A y - ContinuousLinearMap.id ℝ (Space n)).le_opNorm ξ).trans
+      (mul_le_mul_of_nonneg_right h.bA' (norm_nonneg ξ))
+    nlinarith [norm_nonneg ξ]
+  rw [e]
+  linarith [(abs_le.mp h1).1]
+
+theorem Add_ge (h : PtHyp A K C₀ y) : 3 / 4 ≤ ⟪ed n, A y (ed n)⟫_ℝ := by
+  have := h.coer (ed n)
+  rw [norm_ed, real_inner_comm] at this
+  linarith
+
+theorem Add_le (h : PtHyp A K C₀ y) : ⟪ed n, A y (ed n)⟫_ℝ ≤ 5 / 4 := by
+  have h1 := (real_inner_le_norm (ed n) (A y (ed n))).trans
+    (mul_le_mul_of_nonneg_left (h.normAv (ed n)) (norm_nonneg _))
+  rw [norm_ed] at h1
+  linarith
+
+theorem bd2A' (h : PtHyp A K C₀ y) (u : Space n) :
+    ‖fderiv ℝ (fderiv ℝ A) y u‖ ≤ K / vcoord y ^ 3 * ‖u‖ := by
+  have hs := h.spos
+  have hK := h.hK
+  refine ContinuousLinearMap.opNorm_le_bound _ (by positivity) fun v => ?_
+  have e := iteratedFDeriv_two_apply (𝕜 := ℝ) A y ![u, v]
+  simp only [Matrix.cons_val_zero, Matrix.cons_val_one] at e
+  rw [← e]
+  refine ((iteratedFDeriv ℝ 2 A y).le_opNorm ![u, v]).trans ?_
+  simp only [Fin.prod_univ_two, Matrix.cons_val_zero, Matrix.cons_val_one]
+  calc ‖iteratedFDeriv ℝ 2 A y‖ * (‖u‖ * ‖v‖) ≤ K / vcoord y ^ 3 * (‖u‖ * ‖v‖) :=
+        mul_le_mul_of_nonneg_right h.bd2A (by positivity)
+    _ = K / vcoord y ^ 3 * ‖u‖ * ‖v‖ := by ring
+
+theorem diffA (h : PtHyp A K C₀ y) : DifferentiableAt ℝ A y :=
+  h.cd.differentiableAt (by norm_num)
+
+theorem diffDA (h : PtHyp A K C₀ y) : DifferentiableAt ℝ (fderiv ℝ A) y :=
+  (h.cd.fderiv_right (m := 1) (by norm_num)).differentiableAt one_ne_zero
+
+end PtHyp
+
+/-! #### `V = A ∇φ`, `q = ⟪A∇φ, ∇φ⟫` and their derivatives -/
+
+theorem carlV_phi (A : Space n → Space n →L[ℝ] Space n) (C₀ : ℝ) {z : Space n}
+    (hz : 0 < vcoord z) : carlV A (phi C₀) z = g1 C₀ (vcoord z) • A z (ed n) := by
+  rw [carlV, gradient_phi C₀ hz, map_smul]
+
+theorem carlV_phi_ev (A : Space n → Space n →L[ℝ] Space n) (C₀ : ℝ) {y : Space n}
+    (hy : 0 < vcoord y) :
+    carlV A (phi C₀) =ᶠ[𝓝 y] fun z => g1 C₀ (vcoord z) • A z (ed n) := by
+  filter_upwards [(isOpen_H (n := n) 0).mem_nhds hy] with z hz
+  exact carlV_phi A C₀ hz
+
+theorem carlQ_phi (A : Space n → Space n →L[ℝ] Space n) (C₀ : ℝ) {z : Space n}
+    (hz : 0 < vcoord z) :
+    carlQ A (phi C₀) z = g1 C₀ (vcoord z) ^ 2 * ⟪ed n, A z (ed n)⟫_ℝ := by
+  rw [carlQ, gradient_phi C₀ hz, map_smul, real_inner_smul_left, real_inner_smul_right,
+    real_inner_comm]
+  ring
+
+theorem carlQ_phi_ev (A : Space n → Space n →L[ℝ] Space n) (C₀ : ℝ) {y : Space n}
+    (hy : 0 < vcoord y) :
+    carlQ A (phi C₀) =ᶠ[𝓝 y] fun z => g1 C₀ (vcoord z) ^ 2 * ⟪ed n, A z (ed n)⟫_ℝ := by
+  filter_upwards [(isOpen_H (n := n) 0).mem_nhds hy] with z hz
+  exact carlQ_phi A C₀ hz
+
+theorem hasFDerivAt_apply_const {A : Space n → Space n →L[ℝ] Space n} {y : Space n}
+    (hA : DifferentiableAt ℝ A y) (e : Space n) :
+    HasFDerivAt (fun z => A z e) ((fderiv ℝ A y).flip e) y := by
+  have := hA.hasFDerivAt.clm_apply (hasFDerivAt_const e y)
+  simpa using this
+
+theorem fderiv_carlV_apply {A : Space n → Space n →L[ℝ] Space n} (C₀ : ℝ) {y : Space n}
+    (hy : 0 < vcoord y) (hA : DifferentiableAt ℝ A y) (u : Space n) :
+    fderiv ℝ (carlV A (phi C₀)) y u
+      = g1 C₀ (vcoord y) • fderiv ℝ A y u (ed n)
+        + (g2 C₀ (vcoord y) * ⟪ed n, u⟫_ℝ) • A y (ed n) := by
+  have hh := hasFDerivAt_comp_vcoord (hasDerivAt_g1 C₀ hy)
+  have hV : HasFDerivAt (fun z => g1 C₀ (vcoord z) • A z (ed n)) _ y :=
+    hh.smul (hasFDerivAt_apply_const hA (ed n))
+  rw [(carlV_phi_ev A C₀ hy).fderiv_eq, hV.fderiv]
+  simp only [add_apply, smul_apply,
+    ContinuousLinearMap.flip_apply, ContinuousLinearMap.smulRight_apply, innerSL_apply_apply,
+    smul_eq_mul]
+
+theorem fderiv_carlQ_apply {A : Space n → Space n →L[ℝ] Space n} (C₀ : ℝ) {y : Space n}
+    (hy : 0 < vcoord y) (hA : DifferentiableAt ℝ A y) (u : Space n) :
+    fderiv ℝ (carlQ A (phi C₀)) y u
+      = 2 * g1 C₀ (vcoord y) * (g2 C₀ (vcoord y) * ⟪ed n, u⟫_ℝ) * ⟪ed n, A y (ed n)⟫_ℝ
+        + g1 C₀ (vcoord y) ^ 2 * ⟪ed n, fderiv ℝ A y u (ed n)⟫_ℝ := by
+  have hh := hasFDerivAt_comp_vcoord (hasDerivAt_g1 C₀ hy)
+  have hI : HasFDerivAt (fun z => ⟪ed n, A z (ed n)⟫_ℝ)
+      ((innerSL ℝ (ed n)).comp ((fderiv ℝ A y).flip (ed n))) y :=
+    (innerSL ℝ (ed n)).hasFDerivAt.comp y (hasFDerivAt_apply_const hA (ed n))
+  have hq : HasFDerivAt (fun z => g1 C₀ (vcoord z) ^ 2 * ⟪ed n, A z (ed n)⟫_ℝ) _ y :=
+    (hh.pow 2).mul hI
+  rw [(carlQ_phi_ev A C₀ hy).fderiv_eq, hq.fderiv]
+  simp only [add_apply, smul_apply,
+    ContinuousLinearMap.comp_apply, ContinuousLinearMap.flip_apply, innerSL_apply_apply,
+    smul_eq_mul, nsmul_eq_mul]
+  push_cast
+  ring
+
+theorem norm_dA_apply_le {A : Space n → Space n →L[ℝ] Space n} {K C₀ : ℝ} {y : Space n}
+    (h : PtHyp A K C₀ y) (u v : Space n) :
+    ‖fderiv ℝ A y u v‖ ≤ K * (vcoord y ^ 2)⁻¹ * ‖u‖ * ‖v‖ := by
+  calc ‖fderiv ℝ A y u v‖ ≤ ‖fderiv ℝ A y u‖ * ‖v‖ := (fderiv ℝ A y u).le_opNorm v
+    _ ≤ ‖fderiv ℝ A y‖ * ‖u‖ * ‖v‖ :=
+        mul_le_mul_of_nonneg_right ((fderiv ℝ A y).le_opNorm u) (norm_nonneg _)
+    _ ≤ K * (vcoord y ^ 2)⁻¹ * ‖u‖ * ‖v‖ := by
+        gcongr
+        rw [← div_eq_mul_inv]
+        exact h.bdA
+
+/-- The trace in the standard basis `b i = EuclideanSpace.single i 1`. -/
+theorem trace_eq_sum (L : Space n →L[ℝ] Space n) :
+    F2.traceCLM L = ∑ i, ⟪(EuclideanSpace.single i (1 : ℝ) : Space n),
+      L (EuclideanSpace.single i (1 : ℝ))⟫_ℝ := by
+  rw [F2.traceCLM_apply, LinearMap.trace_eq_sum_inner _ (EuclideanSpace.basisFun (Fin (n + 1)) ℝ)]
+  simp [EuclideanSpace.basisFun_apply]
+
+/-- `tr(DA(x)(·) e) = Σᵢ ⟪bᵢ, DA(x) bᵢ e⟫`. -/
+noncomputable def trDA (A : Space n → Space n →L[ℝ] Space n) (x : Space n) : ℝ :=
+  ∑ i, ⟪(EuclideanSpace.single i (1 : ℝ) : Space n),
+    fderiv ℝ A x (EuclideanSpace.single i (1 : ℝ)) (ed n)⟫_ℝ
+
+theorem abs_sum_single_le (f : Space n →L[ℝ] Space n →L[ℝ] Space n) :
+    |∑ i, ⟪(EuclideanSpace.single i (1 : ℝ) : Space n),
+      f (EuclideanSpace.single i (1 : ℝ)) (ed n)⟫_ℝ| ≤ trN n * ‖f‖ := by
+  refine (Finset.abs_sum_le_sum_abs _ _).trans ?_
+  have hb : ∀ i : Fin (n + 1), ‖(EuclideanSpace.single i (1 : ℝ) : Space n)‖ = 1 := fun i => by
+    simp
+  have hterm : ∀ i ∈ (Finset.univ : Finset (Fin (n + 1))),
+      |⟪(EuclideanSpace.single i (1 : ℝ) : Space n),
+        f (EuclideanSpace.single i (1 : ℝ)) (ed n)⟫_ℝ| ≤ ‖f‖ := by
+    intro i _
+    refine (abs_real_inner_le_norm _ _).trans ?_
+    rw [hb, one_mul]
+    calc ‖f (EuclideanSpace.single i (1 : ℝ)) (ed n)‖
+        ≤ ‖f (EuclideanSpace.single i (1 : ℝ))‖ * ‖ed n‖ := (f _).le_opNorm _
+      _ ≤ ‖f‖ * ‖(EuclideanSpace.single i (1 : ℝ) : Space n)‖ * ‖ed n‖ :=
+          mul_le_mul_of_nonneg_right (f.le_opNorm _) (norm_nonneg _)
+      _ = ‖f‖ := by rw [hb, norm_ed, mul_one, mul_one]
+  refine (Finset.sum_le_sum hterm).trans ?_
+  rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul, trN]
+  push_cast
+  rfl
+
+/-- `div V = g'(s) tr(DA(·) e) + g''(s) ⟪e, A e⟫`. -/
+theorem divV_eq {A : Space n → Space n →L[ℝ] Space n} (C₀ : ℝ) {x : Space n}
+    (hx : 0 < vcoord x) (hA : DifferentiableAt ℝ A x) :
+    divergence (carlV A (phi C₀)) x
+      = g1 C₀ (vcoord x) * trDA A x + g2 C₀ (vcoord x) * ⟪ed n, A x (ed n)⟫_ℝ := by
+  have hh := hasFDerivAt_comp_vcoord (hasDerivAt_g1 C₀ hx)
+  have hV : HasFDerivAt (fun z => g1 C₀ (vcoord z) • A z (ed n)) _ x :=
+    hh.smul (hasFDerivAt_apply_const hA (ed n))
+  rw [F2.divergence_eq_traceCLM, (carlV_phi_ev A C₀ hx).fderiv_eq, hV.fderiv, map_add, map_smul,
+    traceCLM_smulRight, smul_eq_mul, smul_apply,
+    innerSL_apply_apply, smul_eq_mul, trace_eq_sum, trDA]
+  simp only [ContinuousLinearMap.flip_apply]
+
+theorem hasFDerivAt_trDA {A : Space n → Space n →L[ℝ] Space n} {y : Space n}
+    (hDA : DifferentiableAt ℝ (fderiv ℝ A) y) :
+    HasFDerivAt (trDA A) (∑ i, (innerSL ℝ (EuclideanSpace.single i (1 : ℝ) : Space n)).comp
+      (((fderiv ℝ (fderiv ℝ A) y).flip (EuclideanSpace.single i (1 : ℝ))).flip (ed n))) y := by
+  have key : ∀ i ∈ (Finset.univ : Finset (Fin (n + 1))),
+      HasFDerivAt (fun x => ⟪(EuclideanSpace.single i (1 : ℝ) : Space n),
+        fderiv ℝ A x (EuclideanSpace.single i (1 : ℝ)) (ed n)⟫_ℝ)
+      ((innerSL ℝ (EuclideanSpace.single i (1 : ℝ) : Space n)).comp
+      (((fderiv ℝ (fderiv ℝ A) y).flip (EuclideanSpace.single i (1 : ℝ))).flip (ed n))) y := by
+    intro i _
+    have hc1 : HasFDerivAt (fun x => fderiv ℝ A x (EuclideanSpace.single i (1 : ℝ)))
+        ((fderiv ℝ (fderiv ℝ A) y).flip (EuclideanSpace.single i (1 : ℝ))) y := by
+      have := hDA.hasFDerivAt.clm_apply (hasFDerivAt_const (EuclideanSpace.single i (1 : ℝ)) y)
+      simpa using this
+    have hc2 : HasFDerivAt (fun x => fderiv ℝ A x (EuclideanSpace.single i (1 : ℝ)) (ed n))
+        (((fderiv ℝ (fderiv ℝ A) y).flip (EuclideanSpace.single i (1 : ℝ))).flip (ed n)) y := by
+      have := hc1.clm_apply (hasFDerivAt_const (ed n) y)
+      simpa using this
+    exact (innerSL ℝ (EuclideanSpace.single i (1 : ℝ) : Space n)).hasFDerivAt.comp y hc2
+  have := HasFDerivAt.sum key
+  convert this using 1
+  funext x
+  simp [trDA]
+
+/-- Pure algebra for `norm_gradient_divV_le`. -/
+theorem alg_divV {a t2 t1 r q eu W κ c0 T U C₀ K : ℝ} (ha0 : 0 ≤ a) (ha1 : a ≤ 1)
+    (ht2 : |t2| ≤ T * (κ * W * U)) (ht1 : |t1| ≤ T * (K * W)) (hr : |r| ≤ K * W * U)
+    (hq : |q| ≤ 5 / 4) (heu : |eu| ≤ U) (hKC : K * W * (C₀ * W) = κ * c0 * W)
+    (hκ0 : 0 ≤ κ) (hκ1 : κ ≤ 1 / 4) (hc00 : 0 ≤ c0) (hc01 : c0 ≤ 1 / 4) (hW0 : 0 < W)
+    (hT : 0 ≤ T) (hU : 0 ≤ U) (hC : 0 ≤ C₀) (hK : 0 ≤ K) :
+    |a * t2 + t1 * (C₀ * W * eu) + (C₀ * W * r + q * (-(2 * c0 * W) * eu))|
+      ≤ (T + 1) * W * U := by
+  have hCW : 0 ≤ C₀ * W := by positivity
+  have b1 : |a * t2| ≤ T * (κ * W * U) := by
+    rw [abs_mul, abs_of_nonneg ha0]
+    calc a * |t2| ≤ 1 * |t2| := mul_le_mul_of_nonneg_right ha1 (abs_nonneg _)
+      _ ≤ T * (κ * W * U) := by rw [one_mul]; exact ht2
+  have b2 : |t1 * (C₀ * W * eu)| ≤ T * (κ * c0 * W) * U := by
+    rw [abs_mul, abs_mul, abs_of_nonneg hCW]
+    calc |t1| * (C₀ * W * |eu|) ≤ T * (K * W) * (C₀ * W * U) := by gcongr
+      _ = T * (K * W * (C₀ * W)) * U := by ring
+      _ = T * (κ * c0 * W) * U := by rw [hKC]
+  have b3 : |C₀ * W * r| ≤ κ * c0 * W * U := by
+    rw [abs_mul, abs_of_nonneg hCW]
+    calc C₀ * W * |r| ≤ C₀ * W * (K * W * U) := by gcongr
+      _ = K * W * (C₀ * W) * U := by ring
+      _ = κ * c0 * W * U := by rw [hKC]
+  have b4 : |q * (-(2 * c0 * W) * eu)| ≤ 5 / 2 * c0 * W * U := by
+    rw [abs_mul, abs_mul, abs_neg, abs_of_nonneg (by positivity : (0 : ℝ) ≤ 2 * c0 * W)]
+    calc |q| * (2 * c0 * W * |eu|) ≤ 5 / 4 * (2 * c0 * W * U) := by gcongr
+      _ = 5 / 2 * c0 * W * U := by ring
+  have htri : |a * t2 + t1 * (C₀ * W * eu) + (C₀ * W * r + q * (-(2 * c0 * W) * eu))|
+      ≤ |a * t2| + |t1 * (C₀ * W * eu)| + (|C₀ * W * r| + |q * (-(2 * c0 * W) * eu)|) := by
+    calc _ ≤ |a * t2 + t1 * (C₀ * W * eu)| + |C₀ * W * r + q * (-(2 * c0 * W) * eu)| :=
+          abs_add_le _ _
+      _ ≤ _ := add_le_add (abs_add_le _ _) (abs_add_le _ _)
+  have hκc : κ * c0 ≤ 1 / 16 := by nlinarith
+  have hWU : 0 ≤ W * U := by positivity
+  have f1 : T * (κ * W * U) ≤ T * (1 / 4 * (W * U)) := by
+    have : κ * W * U ≤ 1 / 4 * (W * U) := by
+      rw [mul_assoc]; exact mul_le_mul_of_nonneg_right hκ1 hWU
+    exact mul_le_mul_of_nonneg_left this hT
+  have f2 : T * (κ * c0 * W) * U ≤ T * (1 / 16 * (W * U)) := by
+    have : κ * c0 * W * U ≤ 1 / 16 * (W * U) := by
+      rw [mul_assoc]; exact mul_le_mul_of_nonneg_right hκc hWU
+    calc T * (κ * c0 * W) * U = T * (κ * c0 * W * U) := by ring
+      _ ≤ T * (1 / 16 * (W * U)) := mul_le_mul_of_nonneg_left this hT
+  have f3 : κ * c0 * W * U ≤ 1 / 16 * (W * U) := by
+    rw [mul_assoc]; exact mul_le_mul_of_nonneg_right hκc hWU
+  have f4 : 5 / 2 * c0 * W * U ≤ 5 / 8 * (W * U) := by
+    have : 5 / 2 * c0 ≤ 5 / 8 := by linarith
+    calc 5 / 2 * c0 * W * U = 5 / 2 * c0 * (W * U) := by ring
+      _ ≤ 5 / 8 * (W * U) := mul_le_mul_of_nonneg_right this hWU
+  have hTWU : 0 ≤ T * (W * U) := by positivity
+  have hfin : (T + 1) * W * U = T * (W * U) + W * U := by ring
+  rw [hfin]
+  linarith
+
+/-- **The bound `|∇ div V| ≤ (d + 1) / s²`** (uses `|D²A| ≤ K/s³` and `g3 = -2C₀/s³`). -/
+theorem norm_gradient_divV_le {A : Space n → Space n →L[ℝ] Space n} {K C₀ : ℝ} {y : Space n}
+    (h : PtHyp A K C₀ y) :
+    ‖gradient (divMu (fun _ => (1 : ℝ)) (carlV A (phi C₀))) y‖
+      ≤ (trN n + 1) / vcoord y ^ 2 := by
+  have hs := h.spos
+  have hT := trN_nonneg (n := n)
+  have hK := h.hK
+  have hC := h.hC₀
+  have hfun : divMu (fun _ => (1 : ℝ)) (carlV A (phi C₀))
+      = fun x => divergence (carlV A (phi C₀)) x := by
+    funext x
+    exact F2.divMu_one _ x
+  rw [hfun]
+  have hnorm : ‖gradient (fun x => divergence (carlV A (phi C₀)) x) y‖
+      = ‖fderiv ℝ (fun x => divergence (carlV A (phi C₀)) x) y‖ := by
+    simp [gradient]
+  rw [hnorm]
+  have hev : (fun x => divergence (carlV A (phi C₀)) x) =ᶠ[𝓝 y]
+      fun x => g1 C₀ (vcoord x) * trDA A x + g2 C₀ (vcoord x) * ⟪ed n, A x (ed n)⟫_ℝ := by
+    filter_upwards [(isOpen_H (n := n) 0).mem_nhds hs, h.cd.eventually (by simp)] with x hx hAx
+    exact divV_eq C₀ hx (hAx.differentiableAt (by norm_num))
+  have h1 := hasFDerivAt_comp_vcoord (hasDerivAt_g1 C₀ hs)
+  have h2 := hasFDerivAt_comp_vcoord (hasDerivAt_g2 C₀ hs)
+  have hτA := hasFDerivAt_trDA h.diffDA
+  have hq0 : HasFDerivAt (fun x => ⟪ed n, A x (ed n)⟫_ℝ)
+      ((innerSL ℝ (ed n)).comp ((fderiv ℝ A y).flip (ed n))) y :=
+    (innerSL ℝ (ed n)).hasFDerivAt.comp y (hasFDerivAt_apply_const h.diffA (ed n))
+  have hD : HasFDerivAt (fun x => g1 C₀ (vcoord x) * trDA A x
+      + g2 C₀ (vcoord x) * ⟪ed n, A x (ed n)⟫_ℝ) _ y := (h1.mul hτA).add (h2.mul hq0)
+  rw [hev.fderiv_eq, hD.fderiv]
+  set W := (vcoord y ^ 2)⁻¹ with hW
+  have hW0 : 0 < W := by positivity
+  have hdivW : (trN n + 1) / vcoord y ^ 2 = (trN n + 1) * W := by rw [hW, div_eq_mul_inv]
+  rw [hdivW]
+  refine ContinuousLinearMap.opNorm_le_bound _ (by positivity) fun u => ?_
+  simp only [add_apply, smul_apply,
+    ContinuousLinearMap.comp_apply, ContinuousLinearMap.flip_apply, innerSL_apply_apply,
+    smul_eq_mul, Real.norm_eq_abs, FunLike.coe_sum, Finset.sum_apply]
+  -- the elementary bounds
+  have hκ0 : 0 ≤ K * (vcoord y)⁻¹ := by positivity
+  have hc00 : 0 ≤ C₀ * (vcoord y)⁻¹ := by positivity
+  have hκ1 : K * (vcoord y)⁻¹ ≤ 1 / 4 := by
+    rw [← div_eq_mul_inv, div_le_iff₀ hs]
+    linarith [h.hsK]
+  have hc01 : C₀ * (vcoord y)⁻¹ ≤ 1 / 4 := by
+    rw [← div_eq_mul_inv, div_le_iff₀ hs]
+    linarith [h.hsC]
+  have hK3 : K / vcoord y ^ 3 = K * (vcoord y)⁻¹ * W := by rw [hW]; field_simp
+  have hg2 : g2 C₀ (vcoord y) = C₀ * W := by rw [g2, hW, div_eq_mul_inv]
+  have hg3 : g3 C₀ (vcoord y) = -(2 * (C₀ * (vcoord y)⁻¹) * W) := by rw [g3, hW]; field_simp
+  have hKC : K * W * (C₀ * W) = K * (vcoord y)⁻¹ * (C₀ * (vcoord y)⁻¹) * W := by
+    rw [hW]; field_simp
+  have heu : |⟪ed n, u⟫_ℝ| ≤ ‖u‖ := by
+    refine (abs_real_inner_le_norm _ _).trans ?_
+    rw [norm_ed, one_mul]
+  have ha0 : 0 ≤ g1 C₀ (vcoord y) := by linarith [h.g1_ge]
+  have hq : |⟪ed n, A y (ed n)⟫_ℝ| ≤ 5 / 4 := by
+    rw [abs_le]; constructor <;> linarith [h.Add_ge, h.Add_le]
+  have ht2 := (abs_sum_single_le (fderiv ℝ (fderiv ℝ A) y u)).trans
+    (mul_le_mul_of_nonneg_left (h.bd2A' u) hT)
+  rw [hK3] at ht2
+  have ht1 := (abs_sum_single_le (fderiv ℝ A y)).trans (mul_le_mul_of_nonneg_left h.bdA hT)
+  rw [div_eq_mul_inv, ← hW] at ht1
+  have hr : |⟪ed n, fderiv ℝ A y u (ed n)⟫_ℝ| ≤ K * W * ‖u‖ := by
+    refine (abs_real_inner_le_norm _ _).trans ?_
+    have := norm_dA_apply_le h u (ed n)
+    rw [norm_ed, mul_one] at this
+    rw [norm_ed, one_mul]
+    exact this
+  rw [hg2, hg3]
+  exact alg_divV ha0 h.g1_le ht2 ht1 hr hq heu hKC hκ0 hκ1 hc00 hc01 hW0 hT (norm_nonneg u) hC hK
+
+/-! #### The bulk term `J` -/
+
+theorem norm_carlV_le {A : Space n → Space n →L[ℝ] Space n} {K C₀ : ℝ} {y : Space n}
+    (h : PtHyp A K C₀ y) : ‖carlV A (phi C₀) y‖ ≤ 5 / 4 := by
+  rw [carlV_phi A C₀ h.spos, norm_smul, Real.norm_eq_abs,
+    abs_of_nonneg (by linarith [h.g1_ge] : (0 : ℝ) ≤ g1 C₀ (vcoord y))]
+  have h1 := h.normAv (ed n)
+  rw [norm_ed, mul_one] at h1
+  calc g1 C₀ (vcoord y) * ‖A y (ed n)‖ ≤ 1 * (5 / 4) :=
+        mul_le_mul h.g1_le h1 (norm_nonneg _) zero_le_one
+    _ = 5 / 4 := by ring
+
+theorem inner_V_gradQ_ge {A : Space n → Space n →L[ℝ] Space n} {K C₀ : ℝ} {y : Space n}
+    (h : PtHyp A K C₀ y) :
+    (C₀ / 2 - 5 / 4 * K) * (vcoord y ^ 2)⁻¹
+      ≤ ⟪carlV A (phi C₀) y, gradient (carlQ A (phi C₀)) y⟫_ℝ := by
+  have hs := h.spos
+  rw [real_inner_comm, inner_gradient_left, fderiv_carlQ_apply C₀ hs h.diffA,
+    carlV_phi A C₀ hs, map_smul, smul_apply, real_inner_smul_right,
+    real_inner_smul_right]
+  have hX : |⟪ed n, fderiv ℝ A y (A y (ed n)) (ed n)⟫_ℝ| ≤ 5 / 4 * K * (vcoord y ^ 2)⁻¹ := by
+    refine (abs_real_inner_le_norm _ _).trans ?_
+    rw [norm_ed, one_mul]
+    have h1 := norm_dA_apply_le h (A y (ed n)) (ed n)
+    have h2 := h.normAv (ed n)
+    rw [norm_ed] at h1 h2
+    have hKW : 0 ≤ K * (vcoord y ^ 2)⁻¹ := by have := h.hK; positivity
+    calc ‖fderiv ℝ A y (A y (ed n)) (ed n)‖ ≤ K * (vcoord y ^ 2)⁻¹ * (5 / 4 * 1) * 1 :=
+          h1.trans (by gcongr)
+      _ = 5 / 4 * K * (vcoord y ^ 2)⁻¹ := by ring
+  have hg := h.g1_ge
+  have hg' := h.g1_le
+  have ha := h.Add_ge
+  have hb : g2 C₀ (vcoord y) = C₀ * (vcoord y ^ 2)⁻¹ := by rw [g2, div_eq_mul_inv]
+  have hCW : 0 ≤ C₀ * (vcoord y ^ 2)⁻¹ := by have := h.hC₀; positivity
+  set g := g1 C₀ (vcoord y) with hgdef
+  set a := ⟪ed n, A y (ed n)⟫_ℝ with hadef
+  set X := ⟪ed n, fderiv ℝ A y (A y (ed n)) (ed n)⟫_ℝ with hXdef
+  have hg3 : 0 ≤ g ^ 3 := by positivity
+  have hg31 : g ^ 3 ≤ 1 := pow_le_one₀ (by linarith) hg'
+  have hXl : -(5 / 4 * K * (vcoord y ^ 2)⁻¹) ≤ g ^ 2 * (g * X) := by
+    have e1 : |g ^ 2 * (g * X)| ≤ |X| := by
+      rw [show g ^ 2 * (g * X) = g ^ 3 * X by ring, abs_mul, abs_of_nonneg hg3]
+      exact mul_le_of_le_one_left (abs_nonneg _) hg31
+    linarith [neg_abs_le (g ^ 2 * (g * X))]
+  have hga : 9 / 16 ≤ g * a := by nlinarith
+  have hmain : C₀ * (vcoord y ^ 2)⁻¹ / 2
+      ≤ 2 * g * (g2 C₀ (vcoord y) * (g * a)) * a := by
+    rw [hb, show 2 * g * (C₀ * (vcoord y ^ 2)⁻¹ * (g * a)) * a
+      = 2 * (g * a) ^ 2 * (C₀ * (vcoord y ^ 2)⁻¹) by ring]
+    have : (9 / 16) ^ 2 ≤ (g * a) ^ 2 := pow_le_pow_left₀ (by norm_num) hga 2
+    nlinarith
+  linarith
+
+theorem inner_dV_ge {A : Space n → Space n →L[ℝ] Space n} {K C₀ : ℝ} {y : Space n}
+    (h : PtHyp A K C₀ y) (ξ : Space n) :
+    -(5 / 4 * K * (vcoord y ^ 2)⁻¹ * ‖ξ‖ ^ 2)
+      ≤ ⟪fderiv ℝ (carlV A (phi C₀)) y (A y ξ), ξ⟫_ℝ := by
+  have hs := h.spos
+  rw [fderiv_carlV_apply C₀ hs h.diffA, inner_add_left, real_inner_smul_left,
+    real_inner_smul_left, h.symm (ed n) ξ]
+  have hY : |⟪fderiv ℝ A y (A y ξ) (ed n), ξ⟫_ℝ| ≤ 5 / 4 * K * (vcoord y ^ 2)⁻¹ * ‖ξ‖ ^ 2 := by
+    refine (abs_real_inner_le_norm _ _).trans ?_
+    have h1 := norm_dA_apply_le h (A y ξ) (ed n)
+    have h2 := h.normAv ξ
+    rw [norm_ed, mul_one] at h1
+    have hKW : 0 ≤ K * (vcoord y ^ 2)⁻¹ := by have := h.hK; positivity
+    calc ‖fderiv ℝ A y (A y ξ) (ed n)‖ * ‖ξ‖ ≤ K * (vcoord y ^ 2)⁻¹ * (5 / 4 * ‖ξ‖) * ‖ξ‖ := by
+          gcongr
+          exact h1.trans (by gcongr)
+      _ = 5 / 4 * K * (vcoord y ^ 2)⁻¹ * ‖ξ‖ ^ 2 := by ring
+  have hg0 : 0 ≤ g1 C₀ (vcoord y) := by linarith [h.g1_ge]
+  have hgY : -(5 / 4 * K * (vcoord y ^ 2)⁻¹ * ‖ξ‖ ^ 2)
+      ≤ g1 C₀ (vcoord y) * ⟪fderiv ℝ A y (A y ξ) (ed n), ξ⟫_ℝ := by
+    have e1 : |g1 C₀ (vcoord y) * ⟪fderiv ℝ A y (A y ξ) (ed n), ξ⟫_ℝ|
+        ≤ |⟪fderiv ℝ A y (A y ξ) (ed n), ξ⟫_ℝ| := by
+      rw [abs_mul, abs_of_nonneg hg0]
+      exact mul_le_of_le_one_left (abs_nonneg _) h.g1_le
+    linarith [neg_abs_le (g1 C₀ (vcoord y) * ⟪fderiv ℝ A y (A y ξ) (ed n), ξ⟫_ℝ)]
+  have hpos : 0 ≤ g2 C₀ (vcoord y) * ⟪ed n, A y ξ⟫_ℝ * ⟪ed n, A y ξ⟫_ℝ := by
+    have := h.g2_nonneg
+    rw [mul_assoc]
+    exact mul_nonneg this (mul_self_nonneg _)
+  linarith
+
+theorem abs_inner_dA_le {A : Space n → Space n →L[ℝ] Space n} {K C₀ : ℝ} {y : Space n}
+    (h : PtHyp A K C₀ y) (ξ : Space n) :
+    |⟪fderiv ℝ A y (carlV A (phi C₀) y) ξ, ξ⟫_ℝ| ≤ 5 / 4 * K * (vcoord y ^ 2)⁻¹ * ‖ξ‖ ^ 2 := by
+  have hs := h.spos
+  refine (abs_real_inner_le_norm _ _).trans ?_
+  have h1 := norm_dA_apply_le h (carlV A (phi C₀) y) ξ
+  have hV := norm_carlV_le h
+  have hKW : 0 ≤ K * (vcoord y ^ 2)⁻¹ := by have := h.hK; positivity
+  calc ‖fderiv ℝ A y (carlV A (phi C₀) y) ξ‖ * ‖ξ‖
+      ≤ K * (vcoord y ^ 2)⁻¹ * ‖carlV A (phi C₀) y‖ * ‖ξ‖ * ‖ξ‖ :=
+        mul_le_mul_of_nonneg_right h1 (norm_nonneg _)
+    _ ≤ K * (vcoord y ^ 2)⁻¹ * (5 / 4) * ‖ξ‖ * ‖ξ‖ := by gcongr
+    _ = 5 / 4 * K * (vcoord y ^ 2)⁻¹ * ‖ξ‖ ^ 2 := by ring
+
+/-- **Lower bound for `J`** (part (a) of the proof of Proposition carleman). -/
+theorem carlJ_ge {A : Space n → Space n →L[ℝ] Space n} {K C₀ : ℝ} {y : Space n}
+    (h : PtHyp A K C₀ y) {τ : ℝ} (hτ : 0 ≤ τ) (w : Space n → ℝ) :
+    (C₀ - 3 * K) * τ ^ 3 * ((vcoord y ^ 2)⁻¹ * w y ^ 2)
+      - Csh n K * τ * ((vcoord y ^ 2)⁻¹ * w y ^ 2)
+      - Csh n K * τ * ((vcoord y ^ 2)⁻¹ * ‖gradient w y‖ ^ 2)
+      ≤ carlJ (fun _ => (1 : ℝ)) A (phi C₀) τ w y := by
+  have hs := h.spos
+  have hW0 : 0 ≤ (vcoord y ^ 2)⁻¹ := by positivity
+  have hK := h.hK
+  have hT := trN_nonneg (n := n)
+  have t1 := inner_V_gradQ_ge h
+  have t2 := inner_dV_ge h (gradient w y)
+  have t3 := abs_inner_dA_le h (gradient w y)
+  have t4 : |⟪A y (gradient w y), gradient (divMu (fun _ => (1 : ℝ)) (carlV A (phi C₀))) y⟫_ℝ|
+      ≤ 5 / 4 * ‖gradient w y‖ * ((trN n + 1) * (vcoord y ^ 2)⁻¹) := by
+    refine (abs_real_inner_le_norm _ _).trans ?_
+    have hdv := norm_gradient_divV_le h
+    rw [div_eq_mul_inv] at hdv
+    exact mul_le_mul (h.normAv _) hdv (norm_nonneg _) (by positivity)
+  have e1 := mul_le_mul_of_nonneg_left t1 (by positivity : (0 : ℝ) ≤ 2 * τ ^ 3 * w y ^ 2)
+  have e2 := mul_le_mul_of_nonneg_left t2 (by positivity : (0 : ℝ) ≤ 4 * τ)
+  have e3 : 2 * τ * ⟪fderiv ℝ A y (carlV A (phi C₀) y) (gradient w y), gradient w y⟫_ℝ
+      ≤ 2 * τ * (5 / 4 * K * (vcoord y ^ 2)⁻¹ * ‖gradient w y‖ ^ 2) :=
+    mul_le_mul_of_nonneg_left ((le_abs_self _).trans t3) (by positivity)
+  have e4a : -(|w y| * (5 / 4 * ‖gradient w y‖ * ((trN n + 1) * (vcoord y ^ 2)⁻¹)))
+      ≤ w y * ⟪A y (gradient w y), gradient (divMu (fun _ => (1 : ℝ)) (carlV A (phi C₀))) y⟫_ℝ := by
+    have h4 : |w y * ⟪A y (gradient w y),
+        gradient (divMu (fun _ => (1 : ℝ)) (carlV A (phi C₀))) y⟫_ℝ|
+        ≤ |w y| * (5 / 4 * ‖gradient w y‖ * ((trN n + 1) * (vcoord y ^ 2)⁻¹)) := by
+      rw [abs_mul]
+      exact mul_le_mul_of_nonneg_left t4 (abs_nonneg _)
+    linarith [neg_abs_le (w y * ⟪A y (gradient w y),
+      gradient (divMu (fun _ => (1 : ℝ)) (carlV A (phi C₀))) y⟫_ℝ)]
+  have e4 := mul_le_mul_of_nonneg_left e4a (by positivity : (0 : ℝ) ≤ 2 * τ)
+  have e5 : 2 * |w y| * ‖gradient w y‖ ≤ w y ^ 2 + ‖gradient w y‖ ^ 2 := by
+    nlinarith [sq_nonneg (|w y| - ‖gradient w y‖), sq_abs (w y)]
+  have e5' := mul_le_mul_of_nonneg_left e5
+    (by positivity : (0 : ℝ) ≤ 5 / 8 * τ * (trN n + 1) * (vcoord y ^ 2)⁻¹)
+  have p1 : 0 ≤ K * τ ^ 3 * (vcoord y ^ 2)⁻¹ * w y ^ 2 := by positivity
+  have p2 : 0 ≤ (8 * K + 3 / 4 * trN n + 3 / 4) * τ * (vcoord y ^ 2)⁻¹ * w y ^ 2 := by positivity
+  have p3 : 0 ≤ (1 / 2 * K + 3 / 4 * trN n + 3 / 4) * τ * (vcoord y ^ 2)⁻¹
+      * ‖gradient w y‖ ^ 2 := by
+    positivity
+  simp only [carlJ, Csh]
+  nlinarith
+
+/-! #### Gradient control (part (b)) -/
+
+/-- **Gradient control**, pointwise: Lemma 2.1(3) with `ϱ = s⁻²`. -/
+theorem grad_ptwise {A : Space n → Space n →L[ℝ] Space n} {K C₀ : ℝ} {y : Space n}
+    (h : PtHyp A K C₀ y) {τ : ℝ} (hτ : 5 ≤ τ) {w : Space n → ℝ} (hw : ContDiffAt ℝ 2 w y) :
+    (vcoord y ^ 2)⁻¹ * ‖gradient w y‖ ^ 2
+      ≤ 2 * |carlS (fun _ => (1 : ℝ)) A (phi C₀) τ w y| * ((vcoord y ^ 2)⁻¹ * |w y|)
+        + 3 * τ ^ 2 * ((vcoord y ^ 2)⁻¹ * w y ^ 2) + 2 * divergence (Gf A w) y := by
+  have hs := h.spos
+  have key : (vcoord y ^ 2)⁻¹ * 1 * ⟪A y (gradient w y), gradient w y⟫_ℝ
+      = -(carlS (fun _ => (1 : ℝ)) A (phi C₀) τ w y * (vcoord y ^ 2)⁻¹ * w y * 1)
+        + τ ^ 2 * carlQ A (phi C₀) y * (vcoord y ^ 2)⁻¹ * w y ^ 2 * 1
+        - 1 * w y * ⟪A y (gradient w y), gradient (fun z : Space n => (vcoord z ^ 2)⁻¹) y⟫_ℝ
+        + divergence (Gf A w) y :=
+    carleman_gradient_pointwise (fun _ => (1 : ℝ)) A (phi C₀) τ w
+      (fun z => (vcoord z ^ 2)⁻¹) y contDiffAt_const one_ne_zero (h.cd.of_le (by norm_num)) hw
+      (contDiffAt_invsq hs)
+  -- the gradient of `s⁻²`
+  have hd : HasDerivAt (fun t : ℝ => (t ^ 2)⁻¹) (-(2 * vcoord y) / (vcoord y ^ 2) ^ 2)
+      (vcoord y) := by
+    have h0 := (hasDerivAt_pow 2 (vcoord y)).inv (pow_ne_zero 2 hs.ne')
+    refine h0.congr_deriv ?_
+    norm_num
+  have hF : HasFDerivAt (fun z : Space n => (vcoord z ^ 2)⁻¹)
+      ((-(2 * vcoord y) / (vcoord y ^ 2) ^ 2) • innerSL ℝ (ed n)) y :=
+    hasFDerivAt_comp_vcoord hd
+  have hgr : gradient (fun z : Space n => (vcoord z ^ 2)⁻¹) y
+      = (-(2 * vcoord y) / (vcoord y ^ 2) ^ 2) • ed n := by
+    refine ext_inner_right ℝ fun ξ => ?_
+    rw [inner_gradient_left, hF.fderiv, real_inner_smul_left, smul_apply,
+      innerSL_apply_apply, smul_eq_mul]
+  set W := (vcoord y ^ 2)⁻¹ with hW
+  have hW0 : 0 < W := by positivity
+  have hsW : vcoord y ^ 2 * W = 1 := by rw [hW]; field_simp
+  have hW1 : W ≤ 1 := by
+    rw [hW]
+    exact inv_le_one_of_one_le₀ (one_le_pow₀ h.hs1)
+  have hc : -(2 * vcoord y) / (vcoord y ^ 2) ^ 2 = -(2 * vcoord y * W ^ 2) := by
+    rw [hW]; field_simp
+  -- the three error terms
+  have c1 : 3 / 4 * (W * ‖gradient w y‖ ^ 2) ≤ W * ⟪A y (gradient w y), gradient w y⟫_ℝ := by
+    have := mul_le_mul_of_nonneg_left (h.coer (gradient w y)) hW0.le
+    linarith
+  have hq : carlQ A (phi C₀) y ≤ 5 / 4 := by
+    rw [carlQ_phi A C₀ hs]
+    have hg := h.g1_ge
+    have hg' := h.g1_le
+    have ha := h.Add_ge
+    have ha' := h.Add_le
+    have hg2 : g1 C₀ (vcoord y) ^ 2 ≤ 1 := pow_le_one₀ (by linarith) hg'
+    nlinarith
+  have c3 : τ ^ 2 * carlQ A (phi C₀) y * W * w y ^ 2 ≤ 5 / 4 * τ ^ 2 * (W * w y ^ 2) := by
+    have : 0 ≤ τ ^ 2 * (W * w y ^ 2) := by positivity
+    nlinarith
+  have c4 : |w y * ⟪A y (gradient w y), gradient (fun z : Space n => (vcoord z ^ 2)⁻¹) y⟫_ℝ|
+      ≤ 5 / 2 * vcoord y * W ^ 2 * (|w y| * ‖gradient w y‖) := by
+    rw [hgr, hc, real_inner_smul_right, abs_mul, abs_mul, abs_neg,
+      abs_of_nonneg (by positivity : (0 : ℝ) ≤ 2 * vcoord y * W ^ 2)]
+    have h1 : |⟪A y (gradient w y), ed n⟫_ℝ| ≤ 5 / 4 * ‖gradient w y‖ := by
+      refine (abs_real_inner_le_norm _ _).trans ?_
+      rw [norm_ed, mul_one]
+      exact h.normAv _
+    have h2 : 0 ≤ 2 * vcoord y * W ^ 2 := by positivity
+    calc |w y| * (2 * vcoord y * W ^ 2 * |⟪A y (gradient w y), ed n⟫_ℝ|)
+        ≤ |w y| * (2 * vcoord y * W ^ 2 * (5 / 4 * ‖gradient w y‖)) := by gcongr
+      _ = 5 / 2 * vcoord y * W ^ 2 * (|w y| * ‖gradient w y‖) := by ring
+  have c5 : 5 / 2 * vcoord y * W ^ 2 * (|w y| * ‖gradient w y‖)
+      ≤ 1 / 4 * (W * ‖gradient w y‖ ^ 2) + 25 / 4 * (W * w y ^ 2) := by
+    have hsq := mul_nonneg hW0.le
+      (sq_nonneg (1 / 2 * ‖gradient w y‖ - 5 / 2 * vcoord y * W * |w y|))
+    have ex : W * (1 / 2 * ‖gradient w y‖ - 5 / 2 * vcoord y * W * |w y|) ^ 2
+        = 1 / 4 * (W * ‖gradient w y‖ ^ 2)
+          - 5 / 2 * vcoord y * W ^ 2 * (|w y| * ‖gradient w y‖)
+          + 25 / 4 * (W * (vcoord y * W) ^ 2 * |w y| ^ 2) := by ring
+    rw [sq_abs] at ex
+    have e : W * (vcoord y * W) ^ 2 * w y ^ 2 = W * w y ^ 2 * (W * (vcoord y ^ 2 * W)) := by ring
+    have hWW : W * (vcoord y ^ 2 * W) ≤ 1 := by rw [hsW, mul_one]; exact hW1
+    have h3 : W * (vcoord y * W) ^ 2 * w y ^ 2 ≤ W * w y ^ 2 := by
+      rw [e]
+      exact mul_le_of_le_one_right (by positivity) hWW
+    linarith
+  have c6 : 25 / 4 * (W * w y ^ 2) ≤ 1 / 4 * τ ^ 2 * (W * w y ^ 2) := by
+    have : (25 : ℝ) ≤ τ ^ 2 := by nlinarith
+    have : 0 ≤ W * w y ^ 2 := by positivity
+    nlinarith
+  have c2 : -(carlS (fun _ => (1 : ℝ)) A (phi C₀) τ w y * W * w y)
+      ≤ |carlS (fun _ => (1 : ℝ)) A (phi C₀) τ w y| * (W * |w y|) := by
+    have := neg_abs_le (carlS (fun _ => (1 : ℝ)) A (phi C₀) τ w y * W * w y)
+    rw [abs_mul, abs_mul, abs_of_pos hW0] at this
+    linarith
+  have c4' := neg_abs_le (w y * ⟪A y (gradient w y),
+    gradient (fun z : Space n => (vcoord z ^ 2)⁻¹) y⟫_ℝ)
+  have c4'' := le_abs_self (w y * ⟪A y (gradient w y),
+    gradient (fun z : Space n => (vcoord z ^ 2)⁻¹) y⟫_ℝ)
+  nlinarith
+
+/-! #### Conjugation and the flux identity -/
+
+theorem conj_pt {A : Space n → Space n →L[ℝ] Space n} {K C₀ : ℝ} {y : Space n}
+    (h : PtHyp A K C₀ y) (τ : ℝ) {v : Space n → ℝ} (hv : ContDiff ℝ 2 v) :
+    Real.exp (τ * phi C₀ y) * divergence (fun z => A z (gradient v z)) y
+      = carlS (fun _ => (1 : ℝ)) A (phi C₀) τ (wc C₀ τ v) y
+        + carlT (fun _ => (1 : ℝ)) A (phi C₀) τ (wc C₀ τ v) y := by
+  have key := F2.carleman_conj_of_symm' (fun _ => (1 : ℝ)) A (phi C₀) τ v y contDiffAt_const
+    one_ne_zero (h.cd.of_le (by norm_num)) h.symm (contDiffAt_phi C₀ h.spos) hv.contDiffAt
+  rw [F2.divMu_one] at key
+  exact key
+
+/-- `F2.carleman_pointwise` with the symmetry of `B` assumed only at the point `x`.
+Adapted (verbatim proof) from this project, `MazyaRefinedCauchy/Pkg/F2.lean`,
+`carleman_pointwise`, whose proof only uses the symmetry at `x`. -/
+theorem carleman_pointwise_loc (μ : Space n → ℝ) (B : Space n → Space n →L[ℝ] Space n)
+    (φ : Space n → ℝ) (τ : ℝ) (w : Space n → ℝ) (x : Space n)
+    (hμ : ContDiffAt ℝ 2 μ x) (hμ0 : μ x ≠ 0) (hB : ContDiffAt ℝ 2 B x)
+    (hsx : ∀ ξ η, ⟪B x ξ, η⟫_ℝ = ⟪ξ, B x η⟫_ℝ)
+    (hφ : ContDiffAt ℝ 3 φ x) (hw : ContDiffAt ℝ 2 w x) :
+    2 * carlS μ B φ τ w x * carlT μ B φ τ w x * μ x
+      = carlJ μ B φ τ w x + divergence (carlFlux μ B φ τ w) x := by
+  -- regularity at `x`
+  have hμd : DifferentiableAt ℝ μ x := hμ.differentiableAt (by simp)
+  have hBd : DifferentiableAt ℝ B x := hB.differentiableAt (by simp)
+  have hwd : DifferentiableAt ℝ w x := hw.differentiableAt (by simp)
+  have hgw : DifferentiableAt ℝ (gradient w) x := F2.differentiableAt_gradient hw
+  have hgφ2 : ContDiffAt ℝ 2 (gradient φ) x := F2.contDiffAt_gradient hφ (by norm_num)
+  have hgφ : DifferentiableAt ℝ (gradient φ) x := hgφ2.differentiableAt (by simp)
+  have hV2 : ContDiffAt ℝ 2 (carlV B φ) x := hB.clm_apply hgφ2
+  have hVd : DifferentiableAt ℝ (carlV B φ) x := hV2.differentiableAt (by simp)
+  have hWd : DifferentiableAt ℝ (fun y => B y (gradient w y)) x := hBd.clm_apply hgw
+  have hμWd : DifferentiableAt ℝ (fun y => μ y • B y (gradient w y)) x := hμd.smul hWd
+  have hμVd : DifferentiableAt ℝ (fun y => μ y • carlV B φ y) x := hμd.smul hVd
+  have had : DifferentiableAt ℝ (fun y => ⟪carlV B φ y, gradient w y⟫_ℝ) x := hVd.inner ℝ hgw
+  have hbd : DifferentiableAt ℝ (fun y => ⟪B y (gradient w y), gradient w y⟫_ℝ) x :=
+    hWd.inner ℝ hgw
+  have hqd : DifferentiableAt ℝ (carlQ B φ) x := (hBd.clm_apply hgφ).inner ℝ hgφ
+  have hδd : DifferentiableAt ℝ (divMu μ (carlV B φ)) x := by
+    have h2 : ContDiffAt ℝ 2 (fun y => μ y • carlV B φ y) x := hμ.smul hV2
+    exact (hμd.inv hμ0).mul (F2.differentiableAt_divergence h2)
+  have hfWd : DifferentiableAt ℝ (fun y => -4 * τ * ⟪carlV B φ y, gradient w y⟫_ℝ
+      - 2 * τ * divMu μ (carlV B φ) y * w y) x :=
+    (had.const_mul _).sub ((hδd.const_mul _).mul hwd)
+  have hfVd : DifferentiableAt ℝ (fun y => 2 * τ * ⟪B y (gradient w y), gradient w y⟫_ℝ
+      - 2 * τ ^ 3 * carlQ B φ y * w y ^ 2) x :=
+    (hbd.const_mul _).sub ((hqd.const_mul _).mul (hwd.pow 2))
+  have h1d : DifferentiableAt ℝ (fun y => (-4 * τ * ⟪carlV B φ y, gradient w y⟫_ℝ
+      - 2 * τ * divMu μ (carlV B φ) y * w y) • (μ y • B y (gradient w y))) x := hfWd.smul hμWd
+  have h2d : DifferentiableAt ℝ (fun y => (2 * τ * ⟪B y (gradient w y), gradient w y⟫_ℝ
+      - 2 * τ ^ 3 * carlQ B φ y * w y ^ 2) • (μ y • carlV B φ y)) x := hfVd.smul hμVd
+  -- symmetry facts
+  have hH : ∀ u v, ⟪fderiv ℝ (gradient w) x u, v⟫_ℝ = ⟪fderiv ℝ (gradient w) x v, u⟫_ℝ :=
+    F2.inner_fderiv_gradient_comm hw
+  -- derivatives of the coefficients of the flux
+  have hW_fd : ∀ u, fderiv ℝ (fun y => B y (gradient w y)) x u
+      = B x (fderiv ℝ (gradient w) x u) + fderiv ℝ B x u (gradient w x) := by
+    intro u
+    rw [fderiv_clm_apply hBd hgw]
+    simp
+  have ha_fd : ∀ u, fderiv ℝ (fun y => ⟪carlV B φ y, gradient w y⟫_ℝ) x u
+      = ⟪carlV B φ x, fderiv ℝ (gradient w) x u⟫_ℝ
+        + ⟪fderiv ℝ (carlV B φ) x u, gradient w x⟫_ℝ :=
+    fun u => fderiv_inner_apply ℝ hVd hgw u
+  have hb_fd : ∀ u, fderiv ℝ (fun y => ⟪B y (gradient w y), gradient w y⟫_ℝ) x u
+      = ⟪B x (gradient w x), fderiv ℝ (gradient w) x u⟫_ℝ
+        + ⟪B x (fderiv ℝ (gradient w) x u) + fderiv ℝ B x u (gradient w x), gradient w x⟫_ℝ := by
+    intro u
+    rw [fderiv_inner_apply ℝ hWd hgw u, hW_fd]
+  have hfW_fd : ∀ u, fderiv ℝ (fun y => -4 * τ * ⟪carlV B φ y, gradient w y⟫_ℝ
+      - 2 * τ * divMu μ (carlV B φ) y * w y) x u
+      = -4 * τ * fderiv ℝ (fun y => ⟪carlV B φ y, gradient w y⟫_ℝ) x u
+        - 2 * τ * (divMu μ (carlV B φ) x * fderiv ℝ w x u
+          + w x * fderiv ℝ (divMu μ (carlV B φ)) x u) := by
+    intro u
+    have h : HasFDerivAt (fun y => -4 * τ * ⟪carlV B φ y, gradient w y⟫_ℝ
+        - 2 * τ * divMu μ (carlV B φ) y * w y) _ x :=
+      (had.hasFDerivAt.const_mul (-4 * τ)).sub
+        ((hδd.hasFDerivAt.const_mul (2 * τ)).mul hwd.hasFDerivAt)
+    rw [h.fderiv]
+    simp only [sub_apply, add_apply, smul_apply, smul_eq_mul]
+    ring
+  have hfV_fd : ∀ u, fderiv ℝ (fun y => 2 * τ * ⟪B y (gradient w y), gradient w y⟫_ℝ
+      - 2 * τ ^ 3 * carlQ B φ y * w y ^ 2) x u
+      = 2 * τ * fderiv ℝ (fun y => ⟪B y (gradient w y), gradient w y⟫_ℝ) x u
+        - 2 * τ ^ 3 * (carlQ B φ x * (2 * w x * fderiv ℝ w x u)
+          + w x ^ 2 * fderiv ℝ (carlQ B φ) x u) := by
+    intro u
+    have h : HasFDerivAt (fun y => 2 * τ * ⟪B y (gradient w y), gradient w y⟫_ℝ
+        - 2 * τ ^ 3 * carlQ B φ y * w y ^ 2) _ x :=
+      (hbd.hasFDerivAt.const_mul (2 * τ)).sub
+        ((hqd.hasFDerivAt.const_mul (2 * τ ^ 3)).mul (hwd.hasFDerivAt.pow 2))
+    rw [h.fderiv]
+    simp only [sub_apply, add_apply, smul_apply, smul_eq_mul, nsmul_eq_mul]
+    push_cast
+    ring
+  -- the divergence of the flux
+  rw [F2.carlFlux_eq, F2.divergence_add h1d h2d, F2.divergence_smul hfWd hμWd,
+    F2.divergence_smul hfVd hμVd, hfW_fd, hfV_fd, ← F2.mul_divMu hμ0, ← F2.mul_divMu hμ0]
+  simp only [map_smul, smul_eq_mul]
+  rw [ha_fd, hb_fd]
+  simp only [carlS, carlT, carlJ]
+  -- identify the remaining atoms
+  have e1 : ⟪carlV B φ x, gradient (carlQ B φ) x⟫_ℝ = fderiv ℝ (carlQ B φ) x (carlV B φ x) := by
+    rw [real_inner_comm, inner_gradient_left]
+  have e2 : ⟪B x (gradient w x), gradient (divMu μ (carlV B φ)) x⟫_ℝ
+      = fderiv ℝ (divMu μ (carlV B φ)) x (B x (gradient w x)) := by
+    rw [real_inner_comm, inner_gradient_left]
+  have e3 : fderiv ℝ w x (B x (gradient w x)) = ⟪B x (gradient w x), gradient w x⟫_ℝ := by
+    rw [← inner_gradient_left, real_inner_comm]
+  have e4 : fderiv ℝ w x (carlV B φ x) = ⟪carlV B φ x, gradient w x⟫_ℝ := by
+    rw [← inner_gradient_left, real_inner_comm]
+  have e5 : ⟪carlV B φ x, fderiv ℝ (gradient w) x (B x (gradient w x))⟫_ℝ
+      = ⟪fderiv ℝ (gradient w) x (carlV B φ x), B x (gradient w x)⟫_ℝ := by
+    rw [real_inner_comm, hH]
+  have e6 : ⟪B x (gradient w x), fderiv ℝ (gradient w) x (carlV B φ x)⟫_ℝ
+      = ⟪fderiv ℝ (gradient w) x (carlV B φ x), B x (gradient w x)⟫_ℝ := by
+    rw [real_inner_comm]
+  have e7 : ⟪B x (fderiv ℝ (gradient w) x (carlV B φ x))
+        + fderiv ℝ B x (carlV B φ x) (gradient w x), gradient w x⟫_ℝ
+      = ⟪fderiv ℝ (gradient w) x (carlV B φ x), B x (gradient w x)⟫_ℝ
+        + ⟪fderiv ℝ B x (carlV B φ x) (gradient w x), gradient w x⟫_ℝ := by
+    rw [inner_add_left, hsx]
+  rw [e1, e2, e3, e4, e5, e6, e7]
+  ring
+
+/-! #### From `w` back to `v` -/
+
+theorem gradient_wc {C₀ τ : ℝ} {v : Space n → ℝ} {y : Space n} (hy : 0 < vcoord y)
+    (hv : DifferentiableAt ℝ v y) :
+    gradient (wc C₀ τ v) y
+      = Real.exp (τ * phi C₀ y) • gradient v y
+        + (τ * g1 C₀ (vcoord y) * wc C₀ τ v y) • ed n := by
+  have hE : HasFDerivAt (fun z => Real.exp (τ * phi C₀ z)) _ y :=
+    ((hasFDerivAt_phi C₀ hy).const_mul τ).exp
+  have hW : HasFDerivAt (wc C₀ τ v) _ y := hE.mul hv.hasFDerivAt
+  refine ext_inner_right ℝ fun ξ => ?_
+  rw [inner_gradient_left, hW.fderiv, inner_add_left, real_inner_smul_left, real_inner_smul_left,
+    inner_gradient_left]
+  simp only [add_apply, smul_apply, innerSL_apply_apply,
+    smul_eq_mul, wc]
+  ring
+
+theorem exp_sq_eq (C₀ τ : ℝ) (y : Space n) :
+    Real.exp (2 * τ * gw C₀ (vcoord y)) = Real.exp (τ * phi C₀ y) ^ 2 := by
+  rw [sq, ← Real.exp_add]
+  congr 1
+  simp only [phi]
+  ring
+
+theorem exp_norm_grad_le {C₀ τ : ℝ} {v : Space n → ℝ} {y : Space n} (hy : 0 < vcoord y)
+    (hg0 : 0 ≤ g1 C₀ (vcoord y)) (hg1 : g1 C₀ (vcoord y) ≤ 1) (hv : DifferentiableAt ℝ v y) :
+    Real.exp (2 * τ * gw C₀ (vcoord y)) * ‖gradient v y‖ ^ 2
+      ≤ 2 * ‖gradient (wc C₀ τ v) y‖ ^ 2 + 2 * τ ^ 2 * wc C₀ τ v y ^ 2 := by
+  have hg := gradient_wc (C₀ := C₀) (τ := τ) hy hv
+  have h1 : Real.exp (τ * phi C₀ y) • gradient v y
+      = gradient (wc C₀ τ v) y - (τ * g1 C₀ (vcoord y) * wc C₀ τ v y) • ed n := by
+    rw [hg]
+    abel
+  have h2 : ‖Real.exp (τ * phi C₀ y) • gradient v y‖
+      ≤ ‖gradient (wc C₀ τ v) y‖ + |τ * g1 C₀ (vcoord y) * wc C₀ τ v y| := by
+    rw [h1]
+    refine (norm_sub_le _ _).trans ?_
+    rw [norm_smul, norm_ed, mul_one, Real.norm_eq_abs]
+  have h3 : ‖Real.exp (τ * phi C₀ y) • gradient v y‖
+      = Real.exp (τ * phi C₀ y) * ‖gradient v y‖ := by
+    rw [norm_smul, Real.norm_eq_abs, abs_of_pos (Real.exp_pos _)]
+  have h4 : |τ * g1 C₀ (vcoord y) * wc C₀ τ v y| ≤ |τ| * |wc C₀ τ v y| := by
+    rw [abs_mul, abs_mul]
+    have hga : |g1 C₀ (vcoord y)| ≤ 1 := abs_le.mpr ⟨by linarith, hg1⟩
+    calc |τ| * |g1 C₀ (vcoord y)| * |wc C₀ τ v y| ≤ |τ| * 1 * |wc C₀ τ v y| := by gcongr
+      _ = |τ| * |wc C₀ τ v y| := by ring
+  rw [exp_sq_eq]
+  have h5 : Real.exp (τ * phi C₀ y) * ‖gradient v y‖
+      ≤ ‖gradient (wc C₀ τ v) y‖ + |τ| * |wc C₀ τ v y| := by linarith
+  have h6 : 0 ≤ Real.exp (τ * phi C₀ y) * ‖gradient v y‖ := by positivity
+  calc Real.exp (τ * phi C₀ y) ^ 2 * ‖gradient v y‖ ^ 2
+      = (Real.exp (τ * phi C₀ y) * ‖gradient v y‖) ^ 2 := by ring
+    _ ≤ (‖gradient (wc C₀ τ v) y‖ + |τ| * |wc C₀ τ v y|) ^ 2 := pow_le_pow_left₀ h6 h5 2
+    _ ≤ 2 * ‖gradient (wc C₀ τ v) y‖ ^ 2 + 2 * τ ^ 2 * wc C₀ τ v y ^ 2 := by
+        nlinarith [sq_nonneg (‖gradient (wc C₀ τ v) y‖ - |τ| * |wc C₀ τ v y|), sq_abs τ,
+          sq_abs (wc C₀ τ v y)]
+
+/-! #### The main pointwise inequality -/
+
+/-- Pure algebra of part (c): `2|S|W|w| C♯τ ≤ S²/2 + 2C♯²τ² W w²`. -/
+theorem alg_s6 {S ww W Cs τ : ℝ} (hW0 : 0 < W) (hW1 : W ≤ 1) (_hCs0 : 0 ≤ Cs) (_hτ0 : 0 ≤ τ) :
+    2 * Cs * τ * (|S| * (W * |ww|)) ≤ 1 / 2 * S ^ 2 + 2 * Cs ^ 2 * τ ^ 2 * (W * ww ^ 2) := by
+  have hW2 : W ^ 2 * ww ^ 2 ≤ W * ww ^ 2 :=
+    mul_le_mul_of_nonneg_right (by nlinarith) (sq_nonneg _)
+  have h1 := sq_nonneg (|S| - 2 * Cs * τ * W * |ww|)
+  have ex : (|S| - 2 * Cs * τ * W * |ww|) ^ 2
+      = |S| ^ 2 - 4 * (Cs * τ * (|S| * (W * |ww|)))
+        + 4 * (Cs ^ 2 * τ ^ 2) * (W ^ 2 * |ww| ^ 2) := by ring
+  rw [sq_abs, sq_abs] at ex
+  have h2 := mul_le_mul_of_nonneg_left hW2 (by positivity : (0 : ℝ) ≤ 4 * (Cs ^ 2 * τ ^ 2))
+  linarith
+
+/-- Pure algebra of part (c): `2τ|S|W|w| ≤ S² + τ³ W w²`. -/
+theorem alg_s11 {S ww W τ : ℝ} (hW0 : 0 < W) (hW1 : W ≤ 1) (hτ1 : 1 ≤ τ) :
+    2 * τ * (|S| * (W * |ww|)) ≤ S ^ 2 + τ ^ 3 * (W * ww ^ 2) := by
+  have hτ0 : 0 ≤ τ := by linarith
+  have hW2 : W ^ 2 * ww ^ 2 ≤ W * ww ^ 2 :=
+    mul_le_mul_of_nonneg_right (by nlinarith) (sq_nonneg _)
+  have hX : 0 ≤ W * ww ^ 2 := by positivity
+  have h1 := sq_nonneg (|S| - τ * W * |ww|)
+  have ex : (|S| - τ * W * |ww|) ^ 2
+      = |S| ^ 2 - 2 * τ * (|S| * (W * |ww|)) + τ ^ 2 * (W ^ 2 * |ww| ^ 2) := by ring
+  rw [sq_abs, sq_abs] at ex
+  have h2 := mul_le_mul_of_nonneg_left hW2 (by positivity : (0 : ℝ) ≤ τ ^ 2)
+  have h3 : τ ^ 2 * (W * ww ^ 2) ≤ τ ^ 3 * (W * ww ^ 2) := by
+    have : τ ^ 2 ≤ τ ^ 3 := by nlinarith
+    exact mul_le_mul_of_nonneg_right this hX
+  linarith
+
+/-- Pure algebra of part (c): combination of all pointwise facts. -/
+theorem alg_main {S T J dF dG P E gw gv ww a W Cs τ vv : ℝ}
+    (hτ5 : 5 ≤ τ) (hτC : 2 * Cs ^ 2 + Cs ≤ τ) (hCs0 : 0 ≤ Cs) (hW0 : 0 < W) (hW1 : W ≤ 1)
+    (hconj : a * P = S + T) (hflux : 2 * S * T * 1 = J + dF)
+    (hJ : (3 * Cs + 2) * τ ^ 3 * (W * ww ^ 2) - Cs * τ * (W * ww ^ 2) - Cs * τ * (W * gw ^ 2) ≤ J)
+    (hG : W * gw ^ 2 ≤ 2 * |S| * (W * |ww|) + 3 * τ ^ 2 * (W * ww ^ 2) + 2 * dG)
+    (hgv : E * gv ^ 2 ≤ 2 * gw ^ 2 + 2 * τ ^ 2 * ww ^ 2)
+    (hE : E = a ^ 2) (hwv : ww = a * vv) :
+    τ ^ 3 * (W * E * vv ^ 2) + τ * (W * E * gv ^ 2)
+      ≤ 11 * (E * P ^ 2) - 11 * dF + (22 * Cs + 4) * τ * dG := by
+  have hτ0 : 0 ≤ τ := by linarith
+  have hτ1 : 1 ≤ τ := by linarith
+  have hX : 0 ≤ W * ww ^ 2 := by positivity
+  have s1 : E * P ^ 2 = (S + T) ^ 2 := by rw [hE, ← hconj]; ring
+  have s2 : S ^ 2 + J + dF ≤ (S + T) ^ 2 := by nlinarith [sq_nonneg T]
+  have s3 : W * E * vv ^ 2 = W * ww ^ 2 := by rw [hwv, hE]; ring
+  have s3' : τ ^ 3 * (W * E * vv ^ 2) = τ ^ 3 * (W * ww ^ 2) := by rw [s3]
+  have s4 := mul_le_mul_of_nonneg_left hgv (mul_nonneg hτ0 hW0.le)
+  have s5 := mul_le_mul_of_nonneg_left hG (mul_nonneg hCs0 hτ0)
+  have s10 := mul_le_mul_of_nonneg_left hG hτ0
+  have s6 := alg_s6 (S := S) (ww := ww) hW0 hW1 hCs0 hτ0
+  have s11 := alg_s11 (S := S) (ww := ww) hW0 hW1 hτ1
+  have hτ3 : 2 * Cs ^ 2 * τ ^ 2 + Cs * τ ≤ τ ^ 3 := by
+    have a1 : 0 ≤ τ ^ 2 * (τ - 2 * Cs ^ 2 - Cs) := mul_nonneg (sq_nonneg τ) (by linarith)
+    have a2 : 0 ≤ Cs * τ * (τ - 1) := mul_nonneg (mul_nonneg hCs0 hτ0) (by linarith)
+    nlinarith
+  have s8 := mul_le_mul_of_nonneg_right hτ3 hX
+  have hS2 : 0 ≤ S ^ 2 := sq_nonneg S
+  have s4' : τ * (W * E * gv ^ 2) ≤ τ * W * (2 * gw ^ 2 + 2 * τ ^ 2 * ww ^ 2) := by
+    have : τ * (W * E * gv ^ 2) = τ * W * (E * gv ^ 2) := by ring
+    rw [this]
+    exact s4
+  linarith
+
+theorem main_ptwise {A : Space n → Space n →L[ℝ] Space n} {K C₀ : ℝ} {y : Space n}
+    (h : PtHyp A K C₀ y) (hC₀ : C₀ = 3 * K + 3 * Csh n K + 2)
+    {τ : ℝ} (hτ5 : 5 ≤ τ) (hτC : 2 * Csh n K ^ 2 + Csh n K ≤ τ)
+    {v : Space n → ℝ} (hv : ContDiff ℝ 2 v) :
+    τ ^ 3 * ((vcoord y ^ 2)⁻¹ * Real.exp (2 * τ * gw C₀ (vcoord y)) * v y ^ 2)
+      + τ * ((vcoord y ^ 2)⁻¹ * Real.exp (2 * τ * gw C₀ (vcoord y)) * ‖gradient v y‖ ^ 2)
+      ≤ 11 * (Real.exp (2 * τ * gw C₀ (vcoord y))
+            * divergence (fun z => A z (gradient v z)) y ^ 2)
+        - 11 * divergence (carlFlux (fun _ => (1 : ℝ)) A (phi C₀) τ (wc C₀ τ v)) y
+        + (22 * Csh n K + 4) * τ * divergence (Gf A (wc C₀ τ v)) y := by
+  have hs := h.spos
+  have hτ0 : 0 ≤ τ := by linarith
+  have hT := trN_nonneg (n := n)
+  have hK := h.hK
+  have hCs0 : 0 ≤ Csh n K := by unfold Csh; linarith
+  have hw2 : ContDiffAt ℝ 2 (wc C₀ τ v) y := contDiffAt_wc C₀ τ hv hs
+  have hconj := conj_pt h τ hv
+  have hflux := carleman_pointwise_loc (fun _ => (1 : ℝ)) A (phi C₀) τ (wc C₀ τ v) y
+    contDiffAt_const one_ne_zero h.cd h.symm (contDiffAt_phi C₀ hs) hw2
+  have hJ := carlJ_ge h hτ0 (wc C₀ τ v)
+  have hG := grad_ptwise h hτ5 hw2
+  have hgv := exp_norm_grad_le (C₀ := C₀) (τ := τ) hs (by linarith [h.g1_ge]) h.g1_le
+    ((hv.differentiable (by norm_num)) y)
+  have hE := exp_sq_eq C₀ τ y
+  have hwv : wc C₀ τ v y = Real.exp (τ * phi C₀ y) * v y := rfl
+  have hW0 : 0 < (vcoord y ^ 2)⁻¹ := by positivity
+  have hW1 : (vcoord y ^ 2)⁻¹ ≤ 1 := inv_le_one_of_one_le₀ (one_le_pow₀ h.hs1)
+  have hCK : C₀ - 3 * K = 3 * Csh n K + 2 := by rw [hC₀]; ring
+  rw [hCK] at hJ
+  exact alg_main hτ5 hτC hCs0 hW0 hW1 hconj hflux hJ hG hgv hE hwv
+
+/-! #### Support and regularity of the fields -/
+
+theorem wc_eq_zero {C₀ τ : ℝ} {v : Space n → ℝ} {z : Space n} (hz : z ∉ tsupport v) :
+    wc C₀ τ v z = 0 := by
+  simp [wc, image_eq_zero_of_notMem_tsupport hz]
+
+theorem gradient_wc_eq_zero {C₀ τ : ℝ} {v : Space n → ℝ} {z : Space n} (hz : z ∉ tsupport v) :
+    gradient (wc C₀ τ v) z = 0 := by
+  have h0 : wc C₀ τ v =ᶠ[𝓝 z] fun _ => (0 : ℝ) := by
+    filter_upwards [eventually_eq_zero_of_not_mem_tsupport hz] with x hx
+    exact wc_eq_zero hx
+  rw [h0.gradient_eq, gradient_fun_const]
+
+theorem flux_eq_zero {A : Space n → Space n →L[ℝ] Space n} {C₀ τ : ℝ} {v : Space n → ℝ}
+    {z : Space n} (hz : z ∉ tsupport v) :
+    carlFlux (fun _ => (1 : ℝ)) A (phi C₀) τ (wc C₀ τ v) z = 0 := by
+  simp [carlFlux, wc_eq_zero hz, gradient_wc_eq_zero hz]
+
+theorem Gf_eq_zero {A : Space n → Space n →L[ℝ] Space n} {C₀ τ : ℝ} {v : Space n → ℝ}
+    {z : Space n} (hz : z ∉ tsupport v) : Gf A (wc C₀ τ v) z = 0 := by
+  simp [Gf, wc_eq_zero hz]
+
+theorem divergence_eq_zero_of {F : Space n → Space n} {v : Space n → ℝ}
+    (hF : ∀ z, z ∉ tsupport v → F z = 0) {y : Space n} (hy : y ∉ tsupport v) :
+    divergence F y = 0 := by
+  have h : F =ᶠ[𝓝 y] fun _ => (0 : Space n) := by
+    filter_upwards [eventually_eq_zero_of_not_mem_tsupport hy] with z hz
+    exact hF z hz
+  rw [F2.divergence_congr h]
+  simp [divergence]
+
+theorem contDiff_of_local {F : Space n → Space n} {v : Space n → ℝ} {l : ℝ}
+    (hF : ∀ z, z ∉ tsupport v → F z = 0) (hvs : tsupport v ⊆ H n l)
+    (hFH : ∀ y ∈ H n l, ContDiffAt ℝ 1 F y) : ContDiff ℝ 1 F := by
+  rw [contDiff_iff_contDiffAt]
+  intro y
+  by_cases hy : y ∈ H n l
+  · exact hFH y hy
+  · have hy' : y ∉ tsupport v := fun h => hy (hvs h)
+    have h : F =ᶠ[𝓝 y] fun _ => (0 : Space n) := by
+      filter_upwards [eventually_eq_zero_of_not_mem_tsupport hy'] with z hz
+      exact hF z hz
+    exact contDiffAt_const.congr_of_eventuallyEq h
+
+theorem hasCompactSupport_of {F : Space n → Space n} {v : Space n → ℝ}
+    (hvc : HasCompactSupport v) (hF : ∀ z, z ∉ tsupport v → F z = 0) : HasCompactSupport F :=
+  HasCompactSupport.intro hvc fun z hz => hF z hz
+
+theorem integrable_divergence {F : Space n → Space n} (hF : ContDiff ℝ 1 F)
+    (hFc : HasCompactSupport F) : Integrable (fun y => divergence F y) := by
+  have hc : Continuous (fun y => divergence F y) :=
+    (F2.traceCLM (n := n)).continuous.comp (hF.continuous_fderiv one_ne_zero)
+  have hs : HasCompactSupport (fun y => divergence F y) :=
+    (hFc.fderiv ℝ).comp_left (g := F2.traceCLM (n := n)) (map_zero _)
+  exact hc.integrable_of_hasCompactSupport hs
+
+theorem contDiffAt_flux {A : Space n → Space n →L[ℝ] Space n} {C₀ τ : ℝ} {v : Space n → ℝ}
+    {y : Space n} (hy : 0 < vcoord y) (hA : ContDiffAt ℝ 2 A y) (hv : ContDiff ℝ 2 v) :
+    ContDiffAt ℝ 1 (carlFlux (fun _ => (1 : ℝ)) A (phi C₀) τ (wc C₀ τ v)) y := by
+  have hw2 := contDiffAt_wc C₀ τ hv hy
+  have hw : ContDiffAt ℝ 1 (wc C₀ τ v) y := hw2.of_le (by norm_num)
+  have hgw : ContDiffAt ℝ 1 (gradient (wc C₀ τ v)) y := F2.contDiffAt_gradient hw2 (by norm_num)
+  have hA1 : ContDiffAt ℝ 1 A y := hA.of_le (by norm_num)
+  have hgφ : ContDiffAt ℝ 2 (gradient (phi C₀)) y :=
+    F2.contDiffAt_gradient (contDiffAt_phi C₀ hy (k := 3)) (by norm_num)
+  have hV2 : ContDiffAt ℝ 2 (carlV A (phi C₀)) y := hA.clm_apply hgφ
+  have hV : ContDiffAt ℝ 1 (carlV A (phi C₀)) y := hV2.of_le (by norm_num)
+  have hq : ContDiffAt ℝ 1 (carlQ A (phi C₀)) y :=
+    (hA1.clm_apply (hgφ.of_le (by norm_num))).inner ℝ (hgφ.of_le (by norm_num))
+  have hV2' : ContDiffAt ℝ 2 (fun z => (fun _ => (1 : ℝ)) z • carlV A (phi C₀) z) y :=
+    (contDiffAt_const (c := (1 : ℝ))).smul hV2
+  have hdv : ContDiffAt ℝ 1
+      (fun x => divergence (fun z => (fun _ => (1 : ℝ)) z • carlV A (phi C₀) z) x) y :=
+    (F2.traceCLM (n := n)).contDiff.contDiffAt.comp y (hV2'.fderiv_right (m := 1) (by norm_num))
+  have hdiv : ContDiffAt ℝ 1 (divMu (fun _ => (1 : ℝ)) (carlV A (phi C₀))) y :=
+    contDiffAt_const.mul hdv
+  have h1 : ContDiffAt ℝ 1 (fun x => ⟪carlV A (phi C₀) x, gradient (wc C₀ τ v) x⟫_ℝ) y :=
+    hV.inner ℝ hgw
+  have hAg : ContDiffAt ℝ 1 (fun x => A x (gradient (wc C₀ τ v) x)) y := hA1.clm_apply hgw
+  have h2 : ContDiffAt ℝ 1
+      (fun x => ⟪A x (gradient (wc C₀ τ v) x), gradient (wc C₀ τ v) x⟫_ℝ) y := hAg.inner ℝ hgw
+  exact (contDiffAt_const (c := (1 : ℝ))).smul (((((contDiffAt_const.mul h1).smul hAg).add
+    ((contDiffAt_const.mul h2).smul hV)).sub
+    (((contDiffAt_const.mul hdiv).mul hw).smul hAg)).sub
+    (((contDiffAt_const.mul hq).mul (hw.pow 2)).smul hV))
+
+theorem contDiffAt_Gf {A : Space n → Space n →L[ℝ] Space n} {C₀ τ : ℝ} {v : Space n → ℝ}
+    {y : Space n} (hy : 0 < vcoord y) (hA : ContDiffAt ℝ 2 A y) (hv : ContDiff ℝ 2 v) :
+    ContDiffAt ℝ 1 (Gf A (wc C₀ τ v)) y := by
+  have hw2 := contDiffAt_wc C₀ τ hv hy
+  have hgw : ContDiffAt ℝ 1 (gradient (wc C₀ τ v)) y := F2.contDiffAt_gradient hw2 (by norm_num)
+  have hA1 : ContDiffAt ℝ 1 A y := hA.of_le (by norm_num)
+  exact ((contDiffAt_const.mul (contDiffAt_invsq hy)).mul (hw2.of_le (by norm_num))).smul
+    (hA1.clm_apply hgw)
+
+end W_PL_carleman
+
 /-- Proposition carleman for the principal part `P₀ v = div(A ∇v)`. -/
 theorem carleman_P0 (K : ℝ) (hK : 0 ≤ K) :
     ∃ C₀ l₁ τ₁ : ℝ, 0 < C₀ ∧ 1 ≤ l₁ ∧ 4 * C₀ ≤ l₁ ∧ 1 ≤ τ₁ ∧
@@ -725,26 +2260,113 @@ theorem carleman_P0 (K : ℝ) (hK : 0 ≤ K) :
               * ‖gradient v y‖ ^ 2)
           ≤ 15 * ∫ y, Real.exp (2 * τ * gw C₀ (vcoord y))
               * divergence (fun z => A z (gradient v z)) y ^ 2 := by
-  -- Proof plan (Proposition carleman of the note, with `μ = 1`, `B = A`,
-  -- `φ y = gw C₀ (vcoord y)`, `s = vcoord y`, `g = gw C₀`):
-  -- * Constants: with `T := ‖F2.traceCLM‖`, put `C♯ := 15/2 K + 5/4 T + 1`,
-  --   `C₀ := 3 K + 3 C♯ + 2`, `l₁ := max (max (4 C₀) (4 K)) (max (C₀ + K) 1)`; then on `H n l`:
-  --   `3/4 ≤ g' ≤ 1`, `g'' = C₀/s²`, `|g'''| = 2C₀/s³`, `‖A - I‖ ≤ 1/4`, `‖DA‖ ≤ K/s²`,
-  --   `‖D²A‖ ≤ K/s³` (from `CarlCoeffs`).
-  -- * `w := e^{τφ} v`.  Pointwise on `H n l`: `e^{τφ} div(A∇v) = carlS w + carlT w`
-  --   (`F2.carleman_conj_of_symm'` with `μ = 1`, `F2.divMu_one`) and
-  --   `2 carlS carlT = carlJ + div carlFlux` (`F2.carleman_pointwise`); off `tsupport v` all
-  --   terms vanish (as in `ellOp_eq_zero_of_not_mem_tsupport`).  `carlFlux` is `C¹` with compact
-  --   support, so `∫ div carlFlux = 0` (`integral_divergence_eq_zero`); integrability of the
-  --   other terms as in `integrable_of_tsupport`.  Hence `∫ e^{2τφ}(P₀v)² ≥ ‖Sw‖² + ∫ carlJ`.
-  -- * Lower bound for `carlJ` on `H n l` (`V = g'(s) A e_d`, `q = g'(s)² A_dd`; bound
-  --   `‖D² V‖` by Leibniz and `|div(fderiv V)| ≤ T ‖D² V‖`):
-  --   `carlJ ≥ (C₀ - 3K) τ³ s⁻² w² - 5/4 T τ s⁻² w² - C♯ τ s⁻² ‖∇w‖²`.
-  -- * Gradient control: `F2.carleman_gradient_pointwise` with `ϱ = s⁻²`, integrated, gives for
-  --   `τ ≥ 5` and `ε > 0`: `∫ s⁻² ‖∇w‖² ≤ ε⁻¹ ‖Sw‖² + (ε + 3τ²) ∫ s⁻² w²`.
-  -- * Take `ε = 2C♯τ` to get `‖e^{τφ}P₀v‖² ≥ ‖Sw‖²/2 + τ³ ∫ s⁻² w²` for `τ ≥ τ₁`, then `ε = τ`,
-  --   and use `e^{τφ}∇v = ∇w - τ g'(s) w e_d`; the total constant is `1 + 14 = 15`.
-  sorry
+  -- Proof (Proposition carleman of the note, with `μ = 1`, `B = A`, `φ = gw C₀ ∘ vcoord`,
+  -- `w = e^{τφ} v`): `C♯ = 8K + 2d + 2` with `d = n + 1` (`W_PL_carleman.Csh`),
+  -- `C₀ = 3K + 3C♯ + 2`, `l₁ = max (4C₀) (max (4K) 1)`, `τ₁ = max 5 (2C♯² + C♯)`.
+  -- The pointwise inequality `W_PL_carleman.main_ptwise`
+  --   `τ³ s⁻² e^{2τφ} v² + τ s⁻² e^{2τφ} |∇v|² ≤ 11 e^{2τφ} (P₀v)² - 11 div F + c τ div G`
+  -- (`F = carlFlux`, `G = s⁻² w A∇w`) holds on `tsupport v ⊆ H n l`; off `tsupport v` all its
+  -- terms vanish. `F` and `G` are `C¹` with compact support, so their divergences integrate to
+  -- `0` (`integral_divergence_eq_zero`); integrating gives the estimate with `11 ≤ 15`.
+  set Cs := W_PL_carleman.Csh n K with hCs
+  have hCs0 : 0 ≤ Cs := by
+    have := W_PL_carleman.trN_nonneg (n := n)
+    simp only [hCs, W_PL_carleman.Csh]
+    linarith
+  refine ⟨3 * K + 3 * Cs + 2, max (4 * (3 * K + 3 * Cs + 2)) (max (4 * K) 1),
+    max 5 (2 * Cs ^ 2 + Cs), by positivity, le_max_of_le_right (le_max_right _ _),
+    le_max_left _ _, le_max_of_le_left (by norm_num), ?_⟩
+  intro l hl A β γ hc τ hτ v hv hvc hvs
+  set C₀ := 3 * K + 3 * Cs + 2 with hC₀def
+  have hl4C : 4 * C₀ ≤ l := le_trans (le_max_left _ _) hl
+  have hl4K : 4 * K ≤ l := le_trans (le_trans (le_max_left _ _) (le_max_right _ _)) hl
+  have hl1 : 1 ≤ l := le_trans (le_trans (le_max_right _ _) (le_max_right _ _)) hl
+  have hτ5 : 5 ≤ τ := le_trans (le_max_left _ _) hτ
+  have hτC : 2 * Cs ^ 2 + Cs ≤ τ := le_trans (le_max_right _ _) hτ
+  have hl0 : 0 ≤ l := by linarith
+  have hC₀0 : 0 ≤ C₀ := by positivity
+  have hPt : ∀ y ∈ H n l, W_PL_carleman.PtHyp A K C₀ y := fun y hy =>
+    { hK := hK
+      hC₀ := hC₀0
+      hs1 := by have : l < vcoord y := hy; linarith
+      hsC := by have : l < vcoord y := hy; linarith
+      hsK := by have : l < vcoord y := hy; linarith
+      cd := hc.contDiffAt y hy
+      symm := hc.symm y hy
+      bA := hc.bound_A y hy
+      bdA := hc.bound_dA y hy
+      bd2A := hc.bound_d2A y hy }
+  have hposH : ∀ y ∈ H n l, 0 < vcoord y := fun y hy => lt_of_le_of_lt hl0 hy
+  set w := W_PL_carleman.wc C₀ τ v with hw
+  set F := carlFlux (fun _ => (1 : ℝ)) A (W_PL_carleman.phi C₀) τ w with hF
+  set G := W_PL_carleman.Gf A w with hG
+  set E : Space n → ℝ := fun y => Real.exp (2 * τ * gw C₀ (vcoord y)) with hE
+  set Wt : Space n → ℝ := fun y => (vcoord y ^ 2)⁻¹ with hWt
+  set P : Space n → ℝ := fun y => divergence (fun z => A z (gradient v z)) y with hP
+  -- the fields `F` and `G` are `C¹` with compact support
+  have hF0 : ∀ z, z ∉ tsupport v → F z = 0 := fun z hz => W_PL_carleman.flux_eq_zero hz
+  have hG0 : ∀ z, z ∉ tsupport v → G z = 0 := fun z hz => W_PL_carleman.Gf_eq_zero hz
+  have hF1 : ContDiff ℝ 1 F := W_PL_carleman.contDiff_of_local hF0 hvs fun y hy =>
+    W_PL_carleman.contDiffAt_flux (hposH y hy) (hc.contDiffAt y hy) hv
+  have hG1 : ContDiff ℝ 1 G := W_PL_carleman.contDiff_of_local hG0 hvs fun y hy =>
+    W_PL_carleman.contDiffAt_Gf (hposH y hy) (hc.contDiffAt y hy) hv
+  have hFc : HasCompactSupport F := W_PL_carleman.hasCompactSupport_of hvc hF0
+  have hGc : HasCompactSupport G := W_PL_carleman.hasCompactSupport_of hvc hG0
+  have hdF0 : ∫ y, divergence F y = 0 := integral_divergence_eq_zero F hF1 hFc
+  have hdG0 : ∫ y, divergence G y = 0 := integral_divergence_eq_zero G hG1 hGc
+  have hdFi : Integrable (fun y => divergence F y) := W_PL_carleman.integrable_divergence hF1 hFc
+  have hdGi : Integrable (fun y => divergence G y) := W_PL_carleman.integrable_divergence hG1 hGc
+  -- integrability of the other terms (as in `carleman`)
+  have hEc : ContinuousOn E (H n l) := continuousOn_weight C₀ τ hl0
+  have hWc : ContinuousOn Wt (H n l) := continuousOn_inv_sq hl0
+  have hgc : Continuous (gradient v) := continuous_gradient_of_contDiff hv
+  have hPc : ContinuousOn P (H n l) := by
+    intro y hy
+    have hFy : ContDiffAt ℝ 1 (fun z => A z (gradient v z)) y :=
+      ((hc.contDiffAt y hy).of_le (by norm_num)).clm_apply
+        (F2.contDiffAt_gradient hv.contDiffAt (m := 1) (by norm_num))
+    exact (continuousAt_divergence hFy).continuousWithinAt
+  have hv0 : ∀ y, y ∉ tsupport v → v y = 0 := fun y hy => image_eq_zero_of_notMem_tsupport hy
+  have hg0 : ∀ y, y ∉ tsupport v → gradient v y = 0 :=
+    fun y hy => (eventually_gradient_eq_zero hy).self_of_nhds
+  have hP0' : ∀ y, y ∉ tsupport v → P y = 0 :=
+    fun y hy => divergence_eq_zero_of_not_mem_tsupport A hy
+  have hi1 : Integrable (fun y => Wt y * E y * v y ^ 2) :=
+    integrable_of_tsupport (isOpen_H l) hvc hvs
+      ((hWc.mul hEc).mul (hv.continuous.continuousOn.pow 2))
+      (fun y hy => by simp [hv0 y hy])
+  have hi2 : Integrable (fun y => Wt y * E y * ‖gradient v y‖ ^ 2) :=
+    integrable_of_tsupport (isOpen_H l) hvc hvs
+      ((hWc.mul hEc).mul ((hgc.norm.pow 2).continuousOn))
+      (fun y hy => by simp [hg0 y hy])
+  have hi3 : Integrable (fun y => E y * P y ^ 2) :=
+    integrable_of_tsupport (isOpen_H l) hvc hvs (hEc.mul (hPc.pow 2))
+      (fun y hy => by simp [hP0' y hy])
+  -- the pointwise inequality
+  have hpt : ∀ y, τ ^ 3 * (Wt y * E y * v y ^ 2) + τ * (Wt y * E y * ‖gradient v y‖ ^ 2)
+      ≤ 11 * (E y * P y ^ 2) - 11 * divergence F y + (22 * Cs + 4) * τ * divergence G y := by
+    intro y
+    by_cases hy : y ∈ tsupport v
+    · exact W_PL_carleman.main_ptwise (hPt y (hvs hy)) rfl hτ5 hτC hv
+    · rw [hv0 y hy, hg0 y hy, hP0' y hy, W_PL_carleman.divergence_eq_zero_of hF0 hy,
+        W_PL_carleman.divergence_eq_zero_of hG0 hy]
+      simp
+  -- integrate
+  have hL : Integrable (fun y => τ ^ 3 * (Wt y * E y * v y ^ 2)
+      + τ * (Wt y * E y * ‖gradient v y‖ ^ 2)) := (hi1.const_mul _).add (hi2.const_mul _)
+  have hR1 : Integrable (fun y => 11 * (E y * P y ^ 2) - 11 * divergence F y) :=
+    (hi3.const_mul _).sub (hdFi.const_mul _)
+  have hR2 : Integrable (fun y => (22 * Cs + 4) * τ * divergence G y) := hdGi.const_mul _
+  have hR : Integrable (fun y => 11 * (E y * P y ^ 2) - 11 * divergence F y
+      + (22 * Cs + 4) * τ * divergence G y) := hR1.add hR2
+  have hm := integral_mono hL hR hpt
+  rw [integral_add (hi1.const_mul _) (hi2.const_mul _), integral_const_mul, integral_const_mul,
+    integral_add hR1 hR2, integral_sub (hi3.const_mul _) (hdFi.const_mul _), integral_const_mul,
+    integral_const_mul, integral_const_mul, hdF0, hdG0] at hm
+  have hI3 : 0 ≤ ∫ y, E y * P y ^ 2 :=
+    integral_nonneg fun y => mul_nonneg (Real.exp_pos _).le (sq_nonneg _)
+  simp only [hE, hWt, hP] at hm hI3
+  linarith
 
 /-- **Proposition carleman.** -/
 theorem carleman (K : ℝ) (hK : 0 ≤ K) :

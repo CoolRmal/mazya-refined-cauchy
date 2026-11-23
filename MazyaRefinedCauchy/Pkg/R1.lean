@@ -1555,6 +1555,113 @@ lemma volume_real_halfBall_le {r : ℝ} (hr : 0 < r) :
   rw [h2] at h1
   linarith
 
+/-! Helpers for `integral_sub_translate_sq_le` (worker `R1_translate`). Route: for `x` off the
+hyperplane `{t = 0}` the segment `s ↦ x + s • h` meets it at most once (`countable_hit`), so the
+countable-exception FTC and Jensen on `(0, 1]` give the pointwise bound `sq_sub_le_segment`; the
+hyperplane is null (`volume_vcoord_eq_zero`), and Tonelli plus translation invariance conclude. -/
+namespace W_R1_translate
+
+/-- The hyperplane `{t = 0}` is Lebesgue-null. -/
+lemma volume_vcoord_eq_zero : volume {x : Space n | vcoord x = 0} = 0 := by
+  have hker : ({x : Space n | vcoord x = 0} : Set (Space n)) =
+      (LinearMap.ker (EuclideanSpace.proj (Fin.last n) : Space n →L[ℝ] ℝ).toLinearMap :
+        Set (Space n)) := by
+    ext x
+    simp [vcoord]
+  rw [hker]
+  apply Measure.addHaar_submodule
+  intro htop
+  have hmem : EuclideanSpace.single (Fin.last n) (1 : ℝ) ∈
+      LinearMap.ker (EuclideanSpace.proj (Fin.last n) : Space n →L[ℝ] ℝ).toLinearMap := by
+    rw [htop]; exact Submodule.mem_top
+  simp at hmem
+
+/-- Jensen (or Cauchy–Schwarz) on `(0, 1]`. -/
+lemma sq_integral_Ioc_le {φ : ℝ → ℝ} (hφ : MemLp φ 2 (volume.restrict (Ioc (0 : ℝ) 1))) :
+    (∫ s in Ioc (0 : ℝ) 1, φ s) ^ 2 ≤ ∫ s in Ioc (0 : ℝ) 1, φ s ^ 2 := by
+  have : IsProbabilityMeasure (volume.restrict (Ioc (0 : ℝ) 1)) := ⟨by simp⟩
+  have h1 := ProbabilityTheory.variance_nonneg φ (volume.restrict (Ioc (0 : ℝ) 1))
+  rw [ProbabilityTheory.variance_eq_sub hφ] at h1
+  simpa [Pi.pow_apply] using h1
+
+/-- A bounded measurable vector field vanishing outside `B_R` has square-integrable norm. -/
+lemma integrable_norm_sq (G : Space n → Space n) (R C : ℝ) (hGs : ∀ x, R ≤ ‖x‖ → G x = 0)
+    (hGm : Measurable G) (hC : ∀ x, ‖G x‖ ≤ C) : Integrable (fun x => ‖G x‖ ^ 2) := by
+  have hint : Integrable ((closedBall (0 : Space n) R).indicator (fun _ => C ^ 2)) :=
+    (integrable_indicator_iff measurableSet_closedBall).mpr
+      (integrableOn_const (measure_closedBall_lt_top).ne)
+  refine hint.mono' ((hGm.norm.pow_const 2).aestronglyMeasurable) (ae_of_all _ fun x => ?_)
+  by_cases hx : x ∈ closedBall (0 : Space n) R
+  · rw [indicator_of_mem hx, Real.norm_eq_abs, abs_of_nonneg (sq_nonneg _)]
+    exact pow_le_pow_left₀ (norm_nonneg _) (hC x) 2
+  · rw [indicator_of_notMem hx]
+    have : R ≤ ‖x‖ := by
+      rw [mem_closedBall, dist_zero_right, not_le] at hx
+      exact hx.le
+    simp [hGs x this]
+
+/-- Off the hyperplane, the segment `s ↦ x + s • h` meets `{t = 0}` at most once. -/
+lemma countable_hit (x h : Space n) (hx : vcoord x ≠ 0) :
+    {s : ℝ | vcoord (x + s • h) = 0}.Countable := by
+  apply Set.Subsingleton.countable
+  intro a ha b hb
+  simp only [Set.mem_ofPred_eq, vcoord, PiLp.add_apply, PiLp.smul_apply, smul_eq_mul] at ha hb
+  by_cases h0 : h (Fin.last n) = 0
+  · rw [h0, mul_zero, add_zero] at ha
+    exact absurd ha hx
+  · have : (a - b) * h (Fin.last n) = 0 := by linear_combination ha - hb
+    rcases mul_eq_zero.mp this with h2 | h2
+    · linarith
+    · exact absurd h2 h0
+
+/-- Segment FTC plus Jensen: the pointwise bound behind the translation estimate. -/
+lemma sq_sub_le_segment (f : Space n → ℝ) (G : Space n → Space n)
+    (hf : Continuous f) (hGm : Measurable G) (C : ℝ) (hC : ∀ x, ‖G x‖ ≤ C)
+    (hd : ∀ x, vcoord x ≠ 0 → HasGradientAt f (G x) x) (x h : Space n) (hx : vcoord x ≠ 0) :
+    (f (x + h) - f x) ^ 2 ≤ ‖h‖ ^ 2 * ∫ s in Ioc (0 : ℝ) 1, ‖G (x + s • h)‖ ^ 2 := by
+  set g : ℝ → ℝ := fun s => f (x + s • h)
+  set g' : ℝ → ℝ := fun s => ⟪G (x + s • h), h⟫_ℝ
+  have hpath : Continuous fun s : ℝ => x + s • h :=
+    continuous_const.add (continuous_id.smul continuous_const)
+  have hgc : Continuous g := hf.comp hpath
+  have hGpm : Measurable fun s : ℝ => G (x + s • h) := hGm.comp hpath.measurable
+  have hg'm : Measurable g' := hGpm.inner measurable_const
+  have hg'b : ∀ s, ‖g' s‖ ≤ C * ‖h‖ := fun s => by
+    rw [Real.norm_eq_abs]
+    exact (abs_real_inner_le_norm _ _).trans (mul_le_mul_of_nonneg_right (hC _) (norm_nonneg _))
+  have hderiv : ∀ s ∈ Ioo (0 : ℝ) 1 \ {s : ℝ | vcoord (x + s • h) = 0},
+      HasDerivAt g (g' s) s := by
+    intro s hs
+    have h1 := (hd (x + s • h) hs.2).hasFDerivAt
+    have h2 : HasDerivAt (fun s : ℝ => x + s • h) h s := by
+      simpa using ((hasDerivAt_id s).smul_const h).const_add x
+    have h3 := h1.comp_hasDerivAt s h2
+    rw [InnerProductSpace.toDual_apply_apply] at h3
+    exact h3
+  have hint : IntervalIntegrable g' volume 0 1 := by
+    rw [intervalIntegrable_iff_integrableOn_Ioc_of_le zero_le_one]
+    exact Integrable.of_bound hg'm.aestronglyMeasurable (C * ‖h‖) (ae_of_all _ hg'b)
+  have hftc := integral_eq_of_hasDerivAt_off_countable_of_le g g' zero_le_one
+    (countable_hit x h hx) hgc.continuousOn hderiv hint
+  have hg1 : g 1 - g 0 = f (x + h) - f x := by simp [g]
+  rw [← hg1, ← hftc, intervalIntegral.integral_of_le zero_le_one]
+  have hmemLp : MemLp g' 2 (volume.restrict (Ioc (0 : ℝ) 1)) :=
+    MemLp.of_bound hg'm.aestronglyMeasurable (C * ‖h‖) (ae_of_all _ hg'b)
+  refine (sq_integral_Ioc_le hmemLp).trans ?_
+  rw [← integral_const_mul]
+  refine integral_mono_of_nonneg (ae_of_all _ fun s => sq_nonneg _) ?_ (ae_of_all _ fun s => ?_)
+  · refine Integrable.of_bound ((hGpm.norm.pow_const 2).const_mul _).aestronglyMeasurable
+      (‖h‖ ^ 2 * C ^ 2) (ae_of_all _ fun s => ?_)
+    rw [Real.norm_eq_abs, abs_of_nonneg (by positivity)]
+    exact mul_le_mul_of_nonneg_left (pow_le_pow_left₀ (norm_nonneg _) (hC _) 2) (by positivity)
+  · show g' s ^ 2 ≤ ‖h‖ ^ 2 * ‖G (x + s • h)‖ ^ 2
+    have := abs_real_inner_le_norm (G (x + s • h)) h
+    calc g' s ^ 2 = |g' s| ^ 2 := (sq_abs _).symm
+      _ ≤ (‖G (x + s • h)‖ * ‖h‖) ^ 2 := pow_le_pow_left₀ (abs_nonneg _) this 2
+      _ = ‖h‖ ^ 2 * ‖G (x + s • h)‖ ^ 2 := by ring
+
+end W_R1_translate
+
 /-- `L²` translation bound for a continuous function supported in `B_R` which is differentiable
 off the hyperplane `{t = 0}`, with bounded measurable gradient `G` supported in `B_R` (segment
 FTC with at most one exceptional point, `intervalIntegral`'s countable-exception FTC, Jensen on
@@ -1565,7 +1672,42 @@ lemma integral_sub_translate_sq_le (f : Space n → ℝ) (G : Space n → Space 
     (hGm : Measurable G) (hGb : ∃ C, ∀ x, ‖G x‖ ≤ C)
     (hd : ∀ x, vcoord x ≠ 0 → HasGradientAt f (G x) x) (h : Space n) :
     ∫ x, (f (x + h) - f x) ^ 2 ≤ (∫ x, ‖G x‖ ^ 2) * ‖h‖ ^ 2 := by
-  sorry
+  -- `hfs` is not needed: `integral_mono_of_nonneg` requires no integrability of the left side.
+  obtain ⟨C, hC⟩ := hGb
+  set F : Space n → ℝ → ℝ := fun x s => ‖G (x + s • h)‖ ^ 2 with hF_def
+  have hGsq := W_R1_translate.integrable_norm_sq G R C hGs hGm hC
+  have hFm : Measurable (Function.uncurry F) := by
+    have : Measurable fun p : Space n × ℝ => p.1 + p.2 • h :=
+      measurable_fst.add (measurable_snd.smul_const h)
+    exact (hGm.comp this).norm.pow_const 2
+  have hFint :
+      Integrable (Function.uncurry F) (volume.prod (volume.restrict (Ioc (0 : ℝ) 1))) := by
+    refine (integrable_prod_iff' hFm.aestronglyMeasurable).mpr ⟨ae_of_all _ fun s => ?_, ?_⟩
+    · exact hGsq.comp_add_right (s • h)
+    · have : (fun s => ∫ x, ‖Function.uncurry F (x, s)‖) = fun _ => ∫ x, ‖G x‖ ^ 2 := by
+        funext s
+        simp only [Function.uncurry_apply_pair, hF_def, norm_pow, norm_norm]
+        exact integral_add_right_eq_self (fun y => ‖G y‖ ^ 2) (s • h)
+      rw [this]
+      exact integrable_const _
+  have hpt : ∀ᵐ x : Space n, (f (x + h) - f x) ^ 2 ≤ ‖h‖ ^ 2 * ∫ s in Ioc (0 : ℝ) 1, F x s := by
+    have hnull := W_R1_translate.volume_vcoord_eq_zero (n := n)
+    have hae : ∀ᵐ x : Space n, vcoord x ≠ 0 := by
+      rw [ae_iff]
+      simpa using hnull
+    filter_upwards [hae] with x hx
+    exact W_R1_translate.sq_sub_le_segment f G hf hGm C hC hd x h hx
+  calc ∫ x, (f (x + h) - f x) ^ 2 ≤ ∫ x, ‖h‖ ^ 2 * ∫ s in Ioc (0 : ℝ) 1, F x s :=
+        integral_mono_of_nonneg (ae_of_all _ fun x => sq_nonneg _)
+          (hFint.integral_prod_left.const_mul _) hpt
+    _ = ‖h‖ ^ 2 * ∫ s in Ioc (0 : ℝ) 1, ∫ x, F x s := by
+        rw [integral_const_mul, integral_integral_swap hFint]
+    _ = ‖h‖ ^ 2 * ∫ s in Ioc (0 : ℝ) 1, ∫ x, ‖G x‖ ^ 2 := by
+        congr 1
+        refine setIntegral_congr_fun measurableSet_Ioc fun s _ => ?_
+        exact integral_add_right_eq_self (fun y => ‖G y‖ ^ 2) (s • h)
+    _ = (∫ x, ‖G x‖ ^ 2) * ‖h‖ ^ 2 := by
+        simp [mul_comm]
 
 /-- Rescaling the pairing of the blow-up with `Δψ`. -/
 lemma integral_w_lap_eq (S : HalfBallSolution n) {s : ℝ} (hs : 0 < s) {ψ : Space n → ℝ}
@@ -1961,6 +2103,471 @@ lemma continuous_cutoff_fold {u : Space n → ℝ} (hu : ContinuousOn u (closedH
     exact continuousAt_const.congr hev.symm
 
 
+namespace W_R1_subseq
+
+/-! ### Helpers for `exists_L2_subseq_halfBall` (Step 4, all proved)
+
+* `reflE`: the reflection `x ↦ x - 2 t e_d`, a linear isometry (hence measure preserving), with
+  `fold = reflE` on `{t < 0}`;
+* `volume_vcoord_eq_zero`: the hyperplane `{t = 0}` is a null set;
+* `integral_le_two_mul_setIntegral`: `∫ F ≤ 2 ∫_{B_r⁺} H` when `F` and `F ∘ reflE` are bounded by
+  `H` on `B_r⁺` and vanish on `{t > 0} \ B_r`;
+* `bump`: the `ContDiffBump` with radii `5/4 < 3/2`; its gradient vanishes for `‖x‖ ≥ 3/2`;
+* `cf u = bump · (u ∘ fold)` and `cG u Du`, its gradient off `{t = 0}` (measurable, bounded,
+  supported in `B_{3/2}`), with the bounds `integral_cf_sq_le` and `integral_norm_cG_sq_le`. -/
+
+/-! #### The reflection `(y, t) ↦ (y, -t)` -/
+
+/-- The reflection `x ↦ x - 2 t e_d` in the hyperplane `{t = 0}`, as a linear map. -/
+noncomputable def reflL (n : ℕ) : Space n →ₗ[ℝ] Space n where
+  toFun x := x - (2 * vcoord x) • ed n
+  map_add' x y := by
+    have h : vcoord (x + y) = vcoord x + vcoord y := by simp [vcoord]
+    rw [h, mul_add, add_smul]
+    abel
+  map_smul' a x := by
+    have h : vcoord (a • x) = a * vcoord x := by simp [vcoord]
+    rw [h, RingHom.id_apply, smul_sub, smul_smul]
+    congr 2
+    ring
+
+lemma reflL_apply (x : Space n) : reflL n x = x - (2 * vcoord x) • ed n := rfl
+
+lemma vcoord_reflL (x : Space n) : vcoord (reflL n x) = - vcoord x := by
+  have h : vcoord (reflL n x) = vcoord x - (2 * vcoord x) * vcoord (ed n) := by
+    simp [reflL_apply, vcoord]
+  rw [h, vcoord_ed]
+  ring
+
+lemma reflL_reflL (x : Space n) : reflL n (reflL n x) = x := by
+  rw [reflL_apply (reflL n x), vcoord_reflL, reflL_apply]
+  module
+
+lemma reflL_apply_castSucc (x : Space n) (i : Fin n) :
+    reflL n x (Fin.castSucc i) = x (Fin.castSucc i) := by
+  simp [reflL_apply, ed, Fin.castSucc_ne_last]
+
+lemma norm_reflL (x : Space n) : ‖reflL n x‖ = ‖x‖ := by
+  have h2 : ‖reflL n x‖ ^ 2 = ‖x‖ ^ 2 := by
+    rw [EuclideanSpace.norm_sq_eq, EuclideanSpace.norm_sq_eq, Fin.sum_univ_castSucc,
+      Fin.sum_univ_castSucc]
+    congr 1
+    · refine Finset.sum_congr rfl fun i _ => ?_
+      rw [reflL_apply_castSucc]
+    · have h1 : reflL n x (Fin.last n) = - x (Fin.last n) := vcoord_reflL x
+      rw [h1, norm_neg]
+  exact (sq_eq_sq₀ (norm_nonneg _) (norm_nonneg _)).mp h2
+
+/-- The reflection as a linear isometry equivalence. -/
+noncomputable def reflE (n : ℕ) : Space n ≃ₗᵢ[ℝ] Space n :=
+  { LinearEquiv.ofInvolutive (reflL n) (fun x => reflL_reflL x) with
+    norm_map' := norm_reflL }
+
+lemma reflE_apply (x : Space n) : reflE n x = x - (2 * vcoord x) • ed n := rfl
+
+lemma vcoord_reflE (x : Space n) : vcoord (reflE n x) = - vcoord x := vcoord_reflL x
+
+lemma reflE_reflE (x : Space n) : reflE n (reflE n x) = x := reflL_reflL x
+
+lemma norm_reflE (x : Space n) : ‖reflE n x‖ = ‖x‖ := (reflE n).norm_map x
+
+lemma inner_reflE_left (v w : Space n) : ⟪reflE n v, w⟫_ℝ = ⟪v, reflE n w⟫_ℝ := by
+  rw [reflE_apply, reflE_apply, inner_sub_left, inner_sub_right, real_inner_smul_left,
+    real_inner_smul_right, real_inner_comm w (ed n), F1.inner_ed, F1.inner_ed]
+  simp only [vcoord]
+  ring
+
+lemma fold_eq_reflE {x : Space n} (hx : vcoord x < 0) : fold x = reflE n x := by
+  rw [reflE_apply]
+  simp only [fold, abs_of_neg hx]
+  congr 2
+  ring
+
+/-! #### The hyperplane `{t = 0}` is a null set -/
+
+lemma volume_vcoord_eq_zero : volume {x : Space n | vcoord x = 0} = 0 := by
+  set K : Submodule ℝ (Space n) :=
+    LinearMap.ker ((EuclideanSpace.proj (Fin.last n) : Space n →L[ℝ] ℝ) : Space n →ₗ[ℝ] ℝ)
+    with hK
+  have hset : {x : Space n | vcoord x = 0} = (K : Set (Space n)) := by
+    ext x
+    simp [hK, vcoord]
+  rw [hset]
+  apply Measure.addHaar_submodule
+  intro htop
+  have hmem : ed n ∈ K := by
+    rw [htop]
+    exact Submodule.mem_top
+  simp [hK, ed] at hmem
+
+lemma ae_eq_halfSpace :
+    ({x : Space n | 0 ≤ vcoord x} : Set (Space n)) =ᵐ[volume] {x : Space n | 0 < vcoord x} := by
+  rw [← measure_symmDiff_eq_zero_iff]
+  refine measure_mono_null (fun x hx => ?_) volume_vcoord_eq_zero
+  simp only [Set.mem_symmDiff, Set.mem_ofPred_eq] at hx
+  show vcoord x = 0
+  rcases hx with ⟨h1, h2⟩ | ⟨h1, h2⟩
+  · exact le_antisymm (not_lt.mp h2) h1
+  · exact absurd h1.le h2
+
+/-- Splitting `ℝⁿ⁺¹` into the two half-spaces and reflecting the lower one. -/
+lemma integral_le_two_mul_setIntegral (F H : Space n → ℝ) (r : ℝ)
+    (hF : ∀ x, 0 < vcoord x → F x ≤ (halfBall n r).indicator H x)
+    (hFσ : ∀ x, 0 < vcoord x → F (reflE n x) ≤ (halfBall n r).indicator H x)
+    (hH : IntegrableOn H (halfBall n r)) (hH0 : ∀ x ∈ halfBall n r, 0 ≤ H x) :
+    ∫ x, F x ≤ 2 * ∫ x in halfBall n r, H x := by
+  have hI0 : 0 ≤ ∫ x in halfBall n r, H x := setIntegral_nonneg (measurableSet_halfBall r) hH0
+  by_cases hFi : Integrable F
+  swap
+  · rw [integral_undef hFi]
+    linarith
+  set P : Set (Space n) := {x | 0 < vcoord x} with hP_def
+  have hP : MeasurableSet P := F1.measurableSet_halfSpace 0
+  have hHP : IntegrableOn ((halfBall n r).indicator H) P :=
+    (hH.integrable_indicator (measurableSet_halfBall r)).integrableOn
+  have hHPeq : ∫ x in P, (halfBall n r).indicator H x = ∫ x in halfBall n r, H x := by
+    have hset : P ∩ halfBall n r = halfBall n r := Set.inter_eq_right.mpr fun x hx => hx.2
+    rw [setIntegral_indicator (measurableSet_halfBall r), hset]
+  have h1 : ∫ x in P, F x ≤ ∫ x in halfBall n r, H x := by
+    rw [← hHPeq]
+    exact setIntegral_mono_on hFi.integrableOn hHP hP hF
+  have hσ : MeasurePreserving (reflE n) := (reflE n).measurePreserving
+  have hemb : MeasurableEmbedding (reflE n) := (reflE n).toHomeomorph.measurableEmbedding
+  have hpre : (reflE n) ⁻¹' Pᶜ = {x : Space n | 0 ≤ vcoord x} := by
+    ext x
+    simp only [Set.mem_preimage, Set.mem_compl_iff, hP_def, Set.mem_ofPred_eq, vcoord_reflE,
+      not_lt]
+    constructor <;> intro h <;> linarith
+  have e2 : ∫ x in Pᶜ, F x = ∫ x in P, F (reflE n x) := by
+    rw [← hσ.setIntegral_preimage_emb hemb F Pᶜ, hpre]
+    exact setIntegral_congr_set ae_eq_halfSpace
+  have hFσi : Integrable (fun x => F (reflE n x)) := (hσ.integrable_comp_emb hemb).mpr hFi
+  have h2 : ∫ x in P, F (reflE n x) ≤ ∫ x in halfBall n r, H x := by
+    rw [← hHPeq]
+    exact setIntegral_mono_on hFσi.integrableOn hHP hP hFσ
+  rw [← integral_add_compl hP hFi, e2]
+  linarith
+
+/-! #### The cut-off -/
+
+/-- The cut-off `χ`: a smooth bump equal to `1` on `B_{5/4}` and to `0` off `B_{3/2}`. -/
+noncomputable def bump (n : ℕ) : ContDiffBump (0 : Space n) where
+  rIn := 5 / 4
+  rOut := 3 / 2
+  rIn_pos := by norm_num
+  rIn_lt_rOut := by norm_num
+
+lemma bump_eq_zero {x : Space n} (hx : 3 / 2 ≤ ‖x‖) : bump n x = 0 :=
+  (bump n).zero_of_le_dist (by rw [dist_zero_right]; exact hx)
+
+lemma bump_eq_one {x : Space n} (hx : ‖x‖ ≤ 5 / 4) : bump n x = 1 :=
+  (bump n).one_of_mem_closedBall (by rw [Metric.mem_closedBall, dist_zero_right]; exact hx)
+
+lemma bump_nonneg (x : Space n) : 0 ≤ bump n x := (bump n).nonneg
+
+lemma bump_le_one (x : Space n) : bump n x ≤ 1 := (bump n).le_one
+
+lemma contDiff_bump : ContDiff ℝ 1 (bump n) := (bump n).contDiff
+
+lemma gradient_bump_eq_zero {x : Space n} (hx : 3 / 2 ≤ ‖x‖) : gradient (bump n) x = 0 := by
+  have hmin : IsLocalMin (bump n) x :=
+    Filter.Eventually.of_forall fun y => by rw [bump_eq_zero hx]; exact bump_nonneg y
+  show (toDual ℝ (Space n)).symm (fderiv ℝ (bump n) x) = 0
+  rw [hmin.fderiv_eq_zero, map_zero]
+
+lemma continuous_gradient_bump : Continuous (gradient (bump n : Space n → ℝ)) := by
+  have h : gradient (bump n : Space n → ℝ) =
+      fun x => (toDual ℝ (Space n)).symm (fderiv ℝ (bump n) x) := rfl
+  rw [h]
+  exact (toDual ℝ (Space n)).symm.continuous.comp (contDiff_bump.continuous_fderiv one_ne_zero)
+
+lemma hasGradientAt_bump (x : Space n) : HasGradientAt (bump n) (gradient (bump n) x) x :=
+  ((contDiff_bump.differentiable one_ne_zero) x).hasGradientAt
+
+lemma exists_bound_gradient_bump :
+    ∃ L, 0 ≤ L ∧ ∀ x : Space n, ‖gradient (bump n) x‖ ≤ L := by
+  obtain ⟨C, hC⟩ := (isCompact_closedBall (0 : Space n) (3 / 2)).exists_bound_of_continuousOn
+    continuous_gradient_bump.continuousOn
+  refine ⟨max C 0, le_max_right _ _, fun x => ?_⟩
+  by_cases hx : ‖x‖ ≤ 3 / 2
+  · exact (hC x (by rw [Metric.mem_closedBall, dist_zero_right]; exact hx)).trans
+      (le_max_left _ _)
+  · rw [gradient_bump_eq_zero (le_of_lt (not_le.mp hx)), norm_zero]
+    exact le_max_right _ _
+
+/-! #### Leibniz and chain rules for gradients -/
+
+lemma hasGradientAt_mul {f g : Space n → ℝ} {f' g' x : Space n} (hf : HasGradientAt f f' x)
+    (hg : HasGradientAt g g' x) :
+    HasGradientAt (fun y => f y * g y) (g x • f' + f x • g') x := by
+  rw [hasGradientAt_iff_hasFDerivAt] at hf hg ⊢
+  convert hf.mul hg using 1
+  ext v
+  simp
+  ring
+
+lemma hasGradientAt_comp_reflE {g : Space n → ℝ} {g' x : Space n}
+    (hg : HasGradientAt g g' (reflE n x)) :
+    HasGradientAt (fun y => g (reflE n y)) (reflE n g') x := by
+  rw [hasGradientAt_iff_hasFDerivAt] at hg ⊢
+  have hL : HasFDerivAt (fun y => reflE n y)
+      ((reflE n).toContinuousLinearEquiv : Space n →L[ℝ] Space n) x :=
+    ((reflE n).toContinuousLinearEquiv : Space n →L[ℝ] Space n).hasFDerivAt
+  have hD : (toDual ℝ (Space n)) (reflE n g') = ((toDual ℝ (Space n)) g').comp
+      ((reflE n).toContinuousLinearEquiv : Space n →L[ℝ] Space n) := by
+    ext v
+    simp only [toDual_apply_apply, ContinuousLinearMap.comp_apply]
+    exact inner_reflE_left g' v
+  rw [hD]
+  exact hg.comp x hL
+
+/-! #### The cut-off even reflection and its gradient -/
+
+/-- The cut-off even reflection `χ · (u ∘ fold)`. -/
+noncomputable def cf (u : Space n → ℝ) (x : Space n) : ℝ := bump n x * u (fold x)
+
+/-- The open set `{t > 0, ‖x‖ < 2}`. -/
+def posSet (n : ℕ) : Set (Space n) := {x | 0 < vcoord x ∧ ‖x‖ < 2}
+
+/-- The open set `{t < 0, ‖x‖ < 2}`. -/
+def negSet (n : ℕ) : Set (Space n) := {x | vcoord x < 0 ∧ ‖x‖ < 2}
+
+lemma isOpen_posSet : IsOpen (posSet n) :=
+  (isOpen_lt continuous_const F1.continuous_vcoord).inter
+    (isOpen_lt continuous_norm continuous_const)
+
+lemma isOpen_negSet : IsOpen (negSet n) :=
+  (isOpen_lt F1.continuous_vcoord continuous_const).inter
+    (isOpen_lt continuous_norm continuous_const)
+
+/-- The gradient of `cf u` off the hyperplane `{t = 0}` (and `0` on it). -/
+noncomputable def cG (u : Space n → ℝ) (Du : Space n → Space n) (x : Space n) : Space n :=
+  (posSet n).indicator (fun y => u y • gradient (bump n) y + bump n y • Du y) x +
+    (negSet n).indicator
+      (fun y => u (reflE n y) • gradient (bump n) y + bump n y • reflE n (Du (reflE n y))) x
+
+lemma cf_eq_of_pos (u : Space n → ℝ) {x : Space n} (hx : 0 < vcoord x) :
+    cf u x = bump n x * u x := by
+  rw [cf, fold_of_nonneg hx.le]
+
+lemma cf_eq_of_neg (u : Space n → ℝ) {x : Space n} (hx : vcoord x < 0) :
+    cf u x = bump n x * u (reflE n x) := by
+  rw [cf, fold_eq_reflE hx]
+
+lemma cf_eq_zero (u : Space n → ℝ) {x : Space n} (hx : 3 / 2 ≤ ‖x‖) : cf u x = 0 := by
+  rw [cf, bump_eq_zero hx, zero_mul]
+
+lemma cf_eq_self (u : Space n → ℝ) {x : Space n} (hx : x ∈ halfBall n (5 / 4)) :
+    cf u x = u x := by
+  rw [cf_eq_of_pos u hx.2, bump_eq_one hx.1.le, one_mul]
+
+lemma cG_eq_of_pos (u : Space n → ℝ) (Du : Space n → Space n) {x : Space n}
+    (hx : 0 < vcoord x) (hx2 : ‖x‖ < 2) :
+    cG u Du x = u x • gradient (bump n) x + bump n x • Du x := by
+  have h1 : x ∈ posSet n := ⟨hx, hx2⟩
+  have h2 : x ∉ negSet n := fun h => absurd h.1 (not_lt.mpr hx.le)
+  rw [cG, Set.indicator_of_mem h1, Set.indicator_of_notMem h2, add_zero]
+
+lemma cG_eq_of_neg (u : Space n → ℝ) (Du : Space n → Space n) {x : Space n}
+    (hx : vcoord x < 0) (hx2 : ‖x‖ < 2) :
+    cG u Du x = u (reflE n x) • gradient (bump n) x + bump n x • reflE n (Du (reflE n x)) := by
+  have h1 : x ∉ posSet n := fun h => absurd h.1 (not_lt.mpr hx.le)
+  have h2 : x ∈ negSet n := ⟨hx, hx2⟩
+  rw [cG, Set.indicator_of_notMem h1, Set.indicator_of_mem h2, zero_add]
+
+lemma cG_eq_zero (u : Space n → ℝ) (Du : Space n → Space n) {x : Space n}
+    (hx : 3 / 2 ≤ ‖x‖) : cG u Du x = 0 := by
+  have h1 : u x • gradient (bump n) x + bump n x • Du x = 0 := by
+    rw [gradient_bump_eq_zero hx, bump_eq_zero hx, smul_zero, zero_smul, add_zero]
+  have h2 : u (reflE n x) • gradient (bump n) x + bump n x • reflE n (Du (reflE n x)) = 0 := by
+    rw [gradient_bump_eq_zero hx, bump_eq_zero hx, smul_zero, zero_smul, add_zero]
+  have e1 : (posSet n).indicator (fun y => u y • gradient (bump n) y + bump n y • Du y) x = 0 :=
+    Set.indicator_apply_eq_zero.mpr fun _ => h1
+  have e2 : (negSet n).indicator (fun y => u (reflE n y) • gradient (bump n) y +
+      bump n y • reflE n (Du (reflE n y))) x = 0 :=
+    Set.indicator_apply_eq_zero.mpr fun _ => h2
+  rw [cG, e1, e2, add_zero]
+
+lemma cG_eq_zero_of_vcoord (u : Space n → ℝ) (Du : Space n → Space n) {x : Space n}
+    (hx : vcoord x = 0) : cG u Du x = 0 := by
+  have h1 : x ∉ posSet n := fun h => absurd h.1 (by rw [hx]; exact lt_irrefl 0)
+  have h2 : x ∉ negSet n := fun h => absurd h.1 (by rw [hx]; exact lt_irrefl 0)
+  rw [cG, Set.indicator_of_notMem h1, Set.indicator_of_notMem h2, add_zero]
+
+lemma continuous_cf {u : Space n → ℝ} (hu : ContinuousOn u (closedHalfBall n 2)) :
+    Continuous (cf u) :=
+  continuous_cutoff_fold hu (bump n).continuous (by norm_num : (3 / 2 : ℝ) < 2)
+    (fun _ hx => bump_eq_zero hx)
+
+lemma measurable_indicator_of_continuousOn {f : Space n → Space n} {s : Set (Space n)}
+    (hs : IsOpen s) (hf : ContinuousOn f s) : Measurable (s.indicator f) := by
+  classical
+  rw [← Set.piecewise_eq_indicator]
+  exact hf.measurable_piecewise continuousOn_const hs.measurableSet
+
+lemma measurable_cG {u : Space n → ℝ} {Du : Space n → Space n}
+    (hu : ContinuousOn u (closedHalfBall n 2)) (hDu : ContinuousOn Du (closedHalfBall n 2)) :
+    Measurable (cG u Du) := by
+  have h1 : ContinuousOn (fun y => u y • gradient (bump n) y + bump n y • Du y) (posSet n) := by
+    have hsub : posSet n ⊆ closedHalfBall n 2 := fun x hx => ⟨hx.2, hx.1.le⟩
+    exact ((hu.mono hsub).smul continuous_gradient_bump.continuousOn).add
+      ((bump n).continuous.continuousOn.smul (hDu.mono hsub))
+  have h2 : ContinuousOn (fun y => u (reflE n y) • gradient (bump n) y +
+      bump n y • reflE n (Du (reflE n y))) (negSet n) := by
+    have hmaps : Set.MapsTo (reflE n) (negSet n) (closedHalfBall n 2) := fun x hx =>
+      ⟨by rw [norm_reflE]; exact hx.2, by rw [vcoord_reflE]; linarith [hx.1]⟩
+    have hu' : ContinuousOn (fun y => u (reflE n y)) (negSet n) :=
+      hu.comp (reflE n).continuous.continuousOn hmaps
+    have hDu' : ContinuousOn (fun y => reflE n (Du (reflE n y))) (negSet n) :=
+      (reflE n).continuous.comp_continuousOn (hDu.comp (reflE n).continuous.continuousOn hmaps)
+    exact (hu'.smul continuous_gradient_bump.continuousOn).add
+      ((bump n).continuous.continuousOn.smul hDu')
+  exact (measurable_indicator_of_continuousOn isOpen_posSet h1).add
+    (measurable_indicator_of_continuousOn isOpen_negSet h2)
+
+lemma norm_smul_add_smul_le {a b : ℝ} {v w : Space n} {L : ℝ} (hv : ‖v‖ ≤ L) (hb0 : 0 ≤ b)
+    (hb1 : b ≤ 1) : ‖a • v + b • w‖ ≤ |a| * L + ‖w‖ := by
+  calc ‖a • v + b • w‖ ≤ ‖a • v‖ + ‖b • w‖ := norm_add_le _ _
+    _ = |a| * ‖v‖ + b * ‖w‖ := by
+        rw [norm_smul, norm_smul, Real.norm_eq_abs, Real.norm_eq_abs, abs_of_nonneg hb0]
+    _ ≤ |a| * L + 1 * ‖w‖ := add_le_add (mul_le_mul_of_nonneg_left hv (abs_nonneg a))
+        (mul_le_mul_of_nonneg_right hb1 (norm_nonneg w))
+    _ = |a| * L + ‖w‖ := by ring
+
+lemma norm_sq_smul_add_smul_le {a b : ℝ} {v w : Space n} {L : ℝ} (hv : ‖v‖ ≤ L) (hb0 : 0 ≤ b)
+    (hb1 : b ≤ 1) : ‖a • v + b • w‖ ^ 2 ≤ 2 * L ^ 2 * a ^ 2 + 2 * ‖w‖ ^ 2 := by
+  have h := norm_smul_add_smul_le (a := a) (w := w) hv hb0 hb1
+  have hL : 0 ≤ L := (norm_nonneg v).trans hv
+  have h2 : ‖a • v + b • w‖ ^ 2 ≤ (|a| * L + ‖w‖) ^ 2 := pow_le_pow_left₀ (norm_nonneg _) h 2
+  have h3 : (|a| * L + ‖w‖) ^ 2 ≤ 2 * L ^ 2 * a ^ 2 + 2 * ‖w‖ ^ 2 := by
+    have e : 2 * L ^ 2 * a ^ 2 + 2 * ‖w‖ ^ 2 - (|a| * L + ‖w‖) ^ 2 = (|a| * L - ‖w‖) ^ 2 := by
+      rw [← sq_abs a]
+      ring
+    nlinarith [sq_nonneg (|a| * L - ‖w‖)]
+  exact h2.trans h3
+
+lemma exists_bound_cG {u : Space n → ℝ} {Du : Space n → Space n}
+    (hu : ContinuousOn u (closedHalfBall n 2)) (hDu : ContinuousOn Du (closedHalfBall n 2)) :
+    ∃ C, ∀ x, ‖cG u Du x‖ ≤ C := by
+  obtain ⟨L, hL0, hL⟩ := exists_bound_gradient_bump (n := n)
+  have hK := isCompact_halfBallLe (n := n) (3 / 2)
+  have hKsub : {x : Space n | ‖x‖ ≤ 3 / 2 ∧ 0 ≤ vcoord x} ⊆ closedHalfBall n 2 :=
+    fun x hx => ⟨by linarith [hx.1], hx.2⟩
+  obtain ⟨Cu, hCu⟩ := hK.exists_bound_of_continuousOn (hu.mono hKsub)
+  obtain ⟨CD, hCD⟩ := hK.exists_bound_of_continuousOn (hDu.mono hKsub)
+  have h0K : (0 : Space n) ∈ {x : Space n | ‖x‖ ≤ 3 / 2 ∧ 0 ≤ vcoord x} :=
+    ⟨by rw [norm_zero]; norm_num, by simp [vcoord]⟩
+  have hCu0 : 0 ≤ Cu := (norm_nonneg _).trans (hCu 0 h0K)
+  have hCD0 : 0 ≤ CD := (norm_nonneg _).trans (hCD 0 h0K)
+  refine ⟨Cu * L + CD, fun x => ?_⟩
+  have key : ∀ (a b : ℝ) (v w : Space n), ‖a‖ ≤ Cu → ‖v‖ ≤ L → 0 ≤ b → b ≤ 1 → ‖w‖ ≤ CD →
+      ‖a • v + b • w‖ ≤ Cu * L + CD := by
+    intro a b v w ha hv hb0 hb1 hw
+    refine (norm_smul_add_smul_le hv hb0 hb1).trans ?_
+    rw [← Real.norm_eq_abs]
+    exact add_le_add (mul_le_mul_of_nonneg_right ha hL0) hw
+  by_cases hx : 3 / 2 ≤ ‖x‖
+  · rw [cG_eq_zero u Du hx, norm_zero]
+    positivity
+  have hx' : ‖x‖ < 3 / 2 := lt_of_not_ge hx
+  rcases lt_trichotomy (vcoord x) 0 with hneg | hzero | hpos
+  · rw [cG_eq_of_neg u Du hneg (by linarith)]
+    have hσK : reflE n x ∈ {x : Space n | ‖x‖ ≤ 3 / 2 ∧ 0 ≤ vcoord x} :=
+      ⟨by rw [norm_reflE]; exact hx'.le, by rw [vcoord_reflE]; linarith⟩
+    exact key _ _ _ _ (hCu _ hσK) (hL x) (bump_nonneg x) (bump_le_one x)
+      (by rw [LinearIsometryEquiv.norm_map]; exact hCD _ hσK)
+  · rw [cG_eq_zero_of_vcoord u Du hzero, norm_zero]
+    positivity
+  · rw [cG_eq_of_pos u Du hpos (by linarith)]
+    have hxK : x ∈ {x : Space n | ‖x‖ ≤ 3 / 2 ∧ 0 ≤ vcoord x} := ⟨hx'.le, hpos.le⟩
+    exact key _ _ _ _ (hCu _ hxK) (hL x) (bump_nonneg x) (bump_le_one x) (hCD _ hxK)
+
+lemma hasGradientAt_cf {u : Space n → ℝ} {Du : Space n → Space n}
+    (hgrad : ∀ x ∈ halfBall n 2, HasGradientAt u (Du x) x) {x : Space n} (hx : vcoord x ≠ 0) :
+    HasGradientAt (cf u) (cG u Du x) x := by
+  by_cases hx2 : ‖x‖ < 2
+  · rcases lt_or_gt_of_ne hx with hneg | hpos
+    · rw [cG_eq_of_neg u Du hneg hx2]
+      have hev : cf u =ᶠ[𝓝 x] fun y => bump n y * u (reflE n y) := by
+        filter_upwards [(isOpen_lt F1.continuous_vcoord continuous_const).mem_nhds hneg] with y hy
+        exact cf_eq_of_neg u hy
+      have hσx : reflE n x ∈ halfBall n 2 :=
+        ⟨by rw [norm_reflE]; exact hx2, by rw [vcoord_reflE]; linarith⟩
+      exact (hasGradientAt_mul (hasGradientAt_bump x)
+        (hasGradientAt_comp_reflE (hgrad _ hσx))).congr_of_eventuallyEq hev
+    · rw [cG_eq_of_pos u Du hpos hx2]
+      have hev : cf u =ᶠ[𝓝 x] fun y => bump n y * u y := by
+        filter_upwards [(isOpen_lt continuous_const F1.continuous_vcoord).mem_nhds hpos] with y hy
+        exact cf_eq_of_pos u hy
+      exact (hasGradientAt_mul (hasGradientAt_bump x) (hgrad x ⟨hx2, hpos⟩)).congr_of_eventuallyEq
+        hev
+  · have hx2' : (3 / 2 : ℝ) < ‖x‖ := by linarith [not_lt.mp hx2]
+    rw [cG_eq_zero u Du hx2'.le]
+    have hev : cf u =ᶠ[𝓝 x] fun _ => (0 : ℝ) := by
+      filter_upwards [(isOpen_lt continuous_const continuous_norm).mem_nhds hx2'] with y hy
+      exact cf_eq_zero u hy.le
+    exact (hasGradientAt_const x (0 : ℝ)).congr_of_eventuallyEq hev
+
+lemma sq_bump_mul_le (y a : ℝ) (hb0 : 0 ≤ y) (hb1 : y ≤ 1) : (y * a) ^ 2 ≤ a ^ 2 := by
+  rw [mul_pow]
+  exact mul_le_of_le_one_left (sq_nonneg a) (pow_le_one₀ hb0 hb1)
+
+/-- The `L²` bound of the cut-off even reflection. -/
+lemma integral_cf_sq_le {u : Space n → ℝ} (hu : ContinuousOn u (closedHalfBall n 2)) :
+    ∫ x, cf u x ^ 2 ≤ 2 * ∫ x in halfBall n (3 / 2), u x ^ 2 := by
+  apply integral_le_two_mul_setIntegral (fun x => cf u x ^ 2) (fun x => u x ^ 2) (3 / 2)
+  · intro x hx
+    by_cases hx2 : ‖x‖ < 3 / 2
+    · rw [Set.indicator_of_mem (show x ∈ halfBall n (3 / 2) from ⟨hx2, hx⟩), cf_eq_of_pos u hx]
+      exact sq_bump_mul_le _ _ (bump_nonneg x) (bump_le_one x)
+    · rw [cf_eq_zero u (not_lt.mp hx2), zero_pow two_ne_zero]
+      exact Set.indicator_nonneg (fun y _ => sq_nonneg (u y)) x
+  · intro x hx
+    have hσ : vcoord (reflE n x) < 0 := by rw [vcoord_reflE]; linarith
+    by_cases hx2 : ‖x‖ < 3 / 2
+    · rw [Set.indicator_of_mem (show x ∈ halfBall n (3 / 2) from ⟨hx2, hx⟩), cf_eq_of_neg u hσ,
+        reflE_reflE]
+      exact sq_bump_mul_le _ _ (bump_nonneg _) (bump_le_one _)
+    · rw [cf_eq_zero u (by rw [norm_reflE]; exact not_lt.mp hx2), zero_pow two_ne_zero]
+      exact Set.indicator_nonneg (fun y _ => sq_nonneg (u y)) x
+  · exact integrableOn_halfBall_of_continuousOn (by norm_num) (hu.pow 2)
+  · intro x _
+    exact sq_nonneg _
+
+/-- The `L²` bound of the gradient of the cut-off even reflection. -/
+lemma integral_norm_cG_sq_le {u : Space n → ℝ} {Du : Space n → Space n}
+    (hu : ContinuousOn u (closedHalfBall n 2)) (hDu : ContinuousOn Du (closedHalfBall n 2))
+    {L : ℝ} (hL : ∀ x, ‖gradient (bump n) x‖ ≤ L) :
+    ∫ x, ‖cG u Du x‖ ^ 2 ≤
+      2 * ∫ x in halfBall n (3 / 2), (2 * L ^ 2 * u x ^ 2 + 2 * ‖Du x‖ ^ 2) := by
+  have hL0 : 0 ≤ L := (norm_nonneg _).trans (hL 0)
+  apply integral_le_two_mul_setIntegral (fun x => ‖cG u Du x‖ ^ 2)
+    (fun x => 2 * L ^ 2 * u x ^ 2 + 2 * ‖Du x‖ ^ 2) (3 / 2)
+  · intro x hx
+    by_cases hx2 : ‖x‖ < 3 / 2
+    · rw [Set.indicator_of_mem (show x ∈ halfBall n (3 / 2) from ⟨hx2, hx⟩),
+        cG_eq_of_pos u Du hx (by linarith)]
+      exact norm_sq_smul_add_smul_le (hL x) (bump_nonneg x) (bump_le_one x)
+    · rw [cG_eq_zero u Du (not_lt.mp hx2), norm_zero, zero_pow two_ne_zero]
+      exact Set.indicator_nonneg (fun y _ => by positivity) x
+  · intro x hx
+    have hσ : vcoord (reflE n x) < 0 := by rw [vcoord_reflE]; linarith
+    by_cases hx2 : ‖x‖ < 3 / 2
+    · rw [Set.indicator_of_mem (show x ∈ halfBall n (3 / 2) from ⟨hx2, hx⟩),
+        cG_eq_of_neg u Du hσ (by rw [norm_reflE]; linarith), reflE_reflE]
+      have h := norm_sq_smul_add_smul_le (a := u x) (w := reflE n (Du x)) (hL (reflE n x))
+        (bump_nonneg (reflE n x)) (bump_le_one _)
+      rwa [LinearIsometryEquiv.norm_map] at h
+    · rw [cG_eq_zero u Du (by rw [norm_reflE]; exact not_lt.mp hx2), norm_zero,
+        zero_pow two_ne_zero]
+      exact Set.indicator_nonneg (fun y _ => by positivity) x
+  · exact integrableOn_halfBall_of_continuousOn (by norm_num)
+      ((continuousOn_const.mul (hu.pow 2)).add (continuousOn_const.mul (hDu.norm.pow 2)))
+  · intro x _
+    positivity
+
+end W_R1_subseq
+
 /-- Compactness in `L²(B_{5/4}⁺)` from `H¹(B_{3/2}⁺)` bounds, for functions that are `C¹` in the
 open half-ball and continuous with their gradients up to the flat boundary (F3 applied to the
 cut-off even reflections).
@@ -1984,7 +2591,66 @@ lemma exists_L2_subseq_halfBall (u : ℕ → Space n → ℝ) (Du : ℕ → Spac
     (hH1 : ∀ j, ∫ x in halfBall n (3 / 2), ‖Du j x‖ ^ 2 ≤ M) :
     ∃ (φ : ℕ → ℕ) (g : Space n → ℝ), StrictMono φ ∧ MemLp g 2 ∧
       Tendsto (fun j => ∫ x in halfBall n (5 / 4), (u (φ j) x - g x) ^ 2) atTop (𝓝 0) := by
-  sorry
+  obtain ⟨L, hL0, hL⟩ := W_R1_subseq.exists_bound_gradient_bump (n := n)
+  have hM0 : 0 ≤ M :=
+    (setIntegral_nonneg (measurableSet_halfBall _) fun x _ => sq_nonneg (u 0 x)).trans (hL2 0)
+  set f : ℕ → Space n → ℝ := fun j => W_R1_subseq.cf (u j) with hf_def
+  set M' : ℝ := (4 * L ^ 2 + 4) * M + 2 * M with hM'_def
+  have hfc : ∀ j, Continuous (f j) := fun j => W_R1_subseq.continuous_cf (hcont j)
+  have hfs : ∀ j x, (3 / 2 : ℝ) ≤ ‖x‖ → f j x = 0 := fun j x hx => W_R1_subseq.cf_eq_zero _ hx
+  have hA : 0 ≤ (4 * L ^ 2 + 4) * M := by positivity
+  have hbdd : ∀ j, ∫ x, f j x ^ 2 ≤ M' := by
+    intro j
+    have h1 := W_R1_subseq.integral_cf_sq_le (hcont j)
+    have h2 := hL2 j
+    show ∫ x, W_R1_subseq.cf (u j) x ^ 2 ≤ M'
+    linarith
+  have hG : ∀ j, ∫ x, ‖W_R1_subseq.cG (u j) (Du j) x‖ ^ 2 ≤ (4 * L ^ 2 + 4) * M := by
+    intro j
+    have h1 := W_R1_subseq.integral_norm_cG_sq_le (hcont j) (hDcont j) hL
+    have i1 : IntegrableOn (fun x => u j x ^ 2) (halfBall n (3 / 2)) :=
+      integrableOn_halfBall_of_continuousOn (by norm_num) ((hcont j).pow 2)
+    have i2 : IntegrableOn (fun x => ‖Du j x‖ ^ 2) (halfBall n (3 / 2)) :=
+      integrableOn_halfBall_of_continuousOn (by norm_num) ((hDcont j).norm.pow 2)
+    have h2 : ∫ x in halfBall n (3 / 2), (2 * L ^ 2 * u j x ^ 2 + 2 * ‖Du j x‖ ^ 2) =
+        2 * L ^ 2 * (∫ x in halfBall n (3 / 2), u j x ^ 2) +
+          2 * ∫ x in halfBall n (3 / 2), ‖Du j x‖ ^ 2 := by
+      rw [integral_add (i1.const_mul _) (i2.const_mul _), integral_const_mul, integral_const_mul]
+    have h3 : 2 * L ^ 2 * ∫ x in halfBall n (3 / 2), u j x ^ 2 ≤ 2 * L ^ 2 * M :=
+      mul_le_mul_of_nonneg_left (hL2 j) (by positivity)
+    have h4 := hH1 j
+    rw [h2] at h1
+    linarith
+  have htrans : ∀ j (h : Space n), ∫ x, (f j (x + h) - f j x) ^ 2 ≤ M' * ‖h‖ ^ 2 := by
+    intro j h
+    have h1 := integral_sub_translate_sq_le (W_R1_subseq.cf (u j))
+      (W_R1_subseq.cG (u j) (Du j)) (3 / 2)
+      (W_R1_subseq.continuous_cf (hcont j)) (fun x hx => W_R1_subseq.cf_eq_zero _ hx)
+      (fun x hx => W_R1_subseq.cG_eq_zero _ _ hx) (W_R1_subseq.measurable_cG (hcont j) (hDcont j))
+      (W_R1_subseq.exists_bound_cG (hcont j) (hDcont j))
+      (fun x hx => W_R1_subseq.hasGradientAt_cf (hgrad j) hx) h
+    have h2 : (∫ x, ‖W_R1_subseq.cG (u j) (Du j) x‖ ^ 2) * ‖h‖ ^ 2 ≤ M' * ‖h‖ ^ 2 := by
+      apply mul_le_mul_of_nonneg_right _ (sq_nonneg _)
+      have := hG j
+      linarith
+    exact h1.trans h2
+  obtain ⟨φ, g, hφ, hg, hlim⟩ := exists_L2_convergent_subseq f (3 / 2) M' hfc hfs hbdd htrans
+  refine ⟨φ, g, hφ, hg, ?_⟩
+  have hmem : ∀ j, MemLp (f j) 2 := fun j =>
+    (hfc j).memLp_of_hasCompactSupport (F3.hasCompactSupport_of_eq_zero (hfs j))
+  have hle : ∀ j, ∫ x in halfBall n (5 / 4), (u (φ j) x - g x) ^ 2 ≤
+      ∫ x, (f (φ j) x - g x) ^ 2 := by
+    intro j
+    have heq : ∫ x in halfBall n (5 / 4), (u (φ j) x - g x) ^ 2 =
+        ∫ x in halfBall n (5 / 4), (f (φ j) x - g x) ^ 2 := by
+      refine setIntegral_congr_fun (measurableSet_halfBall _) fun x hx => ?_
+      simp only [hf_def, W_R1_subseq.cf_eq_self _ hx]
+    rw [heq]
+    exact setIntegral_le_integral ((hmem (φ j)).sub hg).integrable_sq
+      (Eventually.of_forall fun x => sq_nonneg _)
+  have hnn : ∀ j, 0 ≤ ∫ x in halfBall n (5 / 4), (u (φ j) x - g x) ^ 2 := fun j =>
+    setIntegral_nonneg (measurableSet_halfBall _) fun x _ => sq_nonneg _
+  exact squeeze_zero hnn hle hlim
 
 /-! ### Step 5: the limit is weakly harmonic -/
 

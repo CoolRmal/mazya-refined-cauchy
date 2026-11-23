@@ -31,7 +31,15 @@ The proof is split into four independent parts, all in the namespace `MazyaRefin
    `B(0, R₀/2)` with a triple satisfying `GoodCoeffs` globally.
 4. `PkgC.l2_comparison` (change of variables).
 
-The assembly is `collar_reduction` at the end of the file.
+The assembly is `collar_reduction` at the end of the file. Status: everything in this file is
+proved (no placeholders); `collar_reduction` depends only on `propext`, `Classical.choice` and
+`Quot.sound`.
+
+Implementation notes: in this module setting, instance-diamond unification on iterated operator
+types such as `Space n →L[ℝ] Space n →L[ℝ] Space n` is fragile (`simp`/`rw` with `zero_smul`,
+`norm_zero` may fail, and `HasCompactSupport.exists_bound_of_continuous` timed out), so such
+facts are proved through general helper lemmas over abstract spaces or via
+`ContinuousLinearMap.opNorm_zero`; traces are handled through `trace_eq_sum_basis`.
 -/
 
 open scoped ContDiff RealInnerProductSpace
@@ -217,6 +225,31 @@ theorem contDiffOn_tildeA (F : Space n → Space n) (hF : ContDiff ℝ ∞ F)
   have haF : ContDiffAt ℝ 2 (fun Y => a (F Y)) X := ((ha.comp hF).of_le (by simp)).contDiffAt
   exact hP.clm_comp (haF.clm_comp hPadj)
 
+/-! ### Auxiliary facts for the assembly -/
+
+/-- `ellOp` only depends on the germ of `A` and on the values of `B` and `C` at the point. -/
+theorem ellOp_congr {A A' : Space n → Space n →L[ℝ] Space n} {B B' : Space n → Space n}
+    {C C' : Space n → ℝ} {v : Space n → ℝ} {x : Space n} (hA : A =ᶠ[𝓝 x] A')
+    (hB : B x = B' x) (hC : C x = C' x) : ellOp A B C v x = ellOp A' B' C' v x := by
+  unfold ellOp
+  have h : (fun y => A y (gradient v y)) =ᶠ[𝓝 x] (fun y => A' y (gradient v y)) := by
+    filter_upwards [hA] with y hy
+    rw [hy]
+  unfold divergence
+  rw [h.fderiv_eq, hB, hC]
+
+/-- The chain rule for the gradient: `∇(u ∘ F) x = DF(x)ᵀ ∇u(F x)`. -/
+theorem gradient_comp {u : Space n → ℝ} {F : Space n → Space n} {x : Space n}
+    (hu : DifferentiableAt ℝ u (F x)) (hF : DifferentiableAt ℝ F x) :
+    gradient (fun y => u (F y)) x =
+      ContinuousLinearMap.adjoint (fderiv ℝ F x) (gradient u (F x)) := by
+  apply ext_inner_right ℝ
+  intro w
+  have : (fun y => u (F y)) = u ∘ F := rfl
+  rw [this, inner_gradient_left, fderiv_comp x hu hF, ContinuousLinearMap.adjoint_inner_left,
+    inner_gradient_left]
+  rfl
+
 /-! ### Part 1: the collar map -/
 
 /-- The properties of the collar map `F` used in the assembly of `collar_reduction`. -/
@@ -258,6 +291,251 @@ The proof of `exists_collarMap` is split as follows (all statements below are us
 * `local_diffeo`: inverse function theorem package for `F = F₀ ∘ L` at `0`.
 -/
 
+/-! #### The conormal collar `F₀` -/
+
+/-- Horizontal coordinates `x ↦ (x (castSucc i))ᵢ`. -/
+noncomputable def hproj (n : ℕ) : Space n →L[ℝ] (Fin n → ℝ) :=
+  ContinuousLinearMap.pi fun i => EuclideanSpace.proj (Fin.castSucc i)
+
+theorem hproj_apply (x : Space n) (i : Fin n) : hproj n x i = x (Fin.castSucc i) := rfl
+
+/-- The point `(y, Γ y)` of the graph. -/
+noncomputable def graphPt (Γ : (Fin n → ℝ) → ℝ) (y : Fin n → ℝ) : Space n :=
+  lift (WithLp.toLp 2 y) (Γ y)
+
+/-- The (non-normalized) inner normal `-∇(graphFn Γ)` at the graph point over `y`. -/
+noncomputable def innerNormal (Γ : (Fin n → ℝ) → ℝ) (y : Fin n → ℝ) : Space n :=
+  -gradient (graphFn Γ) (graphPt Γ y)
+
+/-- The conormal collar `F₀(x', t) = γ(x') + t a(γ(x')) ν̂(x')`. -/
+noncomputable def collar0 (Γ : (Fin n → ℝ) → ℝ) (a : Space n → Space n →L[ℝ] Space n)
+    (X : Space n) : Space n :=
+  graphPt Γ (hproj n X) + vcoord X • a (graphPt Γ (hproj n X)) (innerNormal Γ (hproj n X))
+
+theorem graphPt_apply_castSucc (Γ : (Fin n → ℝ) → ℝ) (y : Fin n → ℝ) (i : Fin n) :
+    graphPt Γ y (Fin.castSucc i) = y i := by
+  simp [graphPt, F1.lift_apply_castSucc]
+
+theorem graphPt_apply_last (Γ : (Fin n → ℝ) → ℝ) (y : Fin n → ℝ) :
+    graphPt Γ y (Fin.last n) = Γ y := by
+  simp [graphPt, F1.lift_apply_last]
+
+theorem graphFn_graphPt (Γ : (Fin n → ℝ) → ℝ) (y : Fin n → ℝ) : graphFn Γ (graphPt Γ y) = 0 := by
+  unfold graphFn
+  simp only [graphPt_apply_castSucc, graphPt_apply_last]
+  exact sub_self _
+
+theorem collar0_of_vcoord_eq_zero (Γ : (Fin n → ℝ) → ℝ) (a : Space n → Space n →L[ℝ] Space n)
+    {X : Space n} (hX : vcoord X = 0) : collar0 Γ a X = graphPt Γ (hproj n X) := by
+  rw [collar0, hX, zero_smul, add_zero]
+
+theorem graphFn_collar0_flat (Γ : (Fin n → ℝ) → ℝ) (a : Space n → Space n →L[ℝ] Space n)
+    {X : Space n} (hX : vcoord X = 0) : graphFn Γ (collar0 Γ a X) = 0 := by
+  rw [collar0_of_vcoord_eq_zero Γ a hX, graphFn_graphPt]
+
+theorem collar0_zero (Γ : (Fin n → ℝ) → ℝ) (hΓ0 : Γ 0 = 0)
+    (a : Space n → Space n →L[ℝ] Space n) : collar0 Γ a 0 = 0 := by
+  have hv : vcoord (0 : Space n) = 0 := by simp [vcoord]
+  rw [collar0_of_vcoord_eq_zero Γ a hv, map_zero]
+  ext i
+  refine Fin.lastCases ?_ (fun j => ?_) i
+  · rw [graphPt_apply_last, hΓ0]; rfl
+  · rw [graphPt_apply_castSucc]; rfl
+
+theorem hproj_ed : hproj n (ed n) = 0 := by
+  funext i
+  rw [hproj_apply]
+  simp [ed, Fin.castSucc_ne_last]
+
+theorem vcoord_ed : vcoord (ed n) = 1 := by
+  simp [vcoord, ed]
+
+theorem hasFDerivAt_graphFn {Γ : (Fin n → ℝ) → ℝ} (hΓ : ContDiff ℝ ∞ Γ) (x : Space n) :
+    HasFDerivAt (graphFn Γ)
+      ((fderiv ℝ Γ (hproj n x)).comp (hproj n) -
+        (EuclideanSpace.proj (Fin.last n) : Space n →L[ℝ] ℝ)) x := by
+  have h1 : HasFDerivAt (fun y => Γ (hproj n y)) ((fderiv ℝ Γ (hproj n x)).comp (hproj n)) x :=
+    ((hΓ.differentiable (by simp)) _).hasFDerivAt.comp x (hproj n).hasFDerivAt
+  exact h1.sub (EuclideanSpace.proj (Fin.last n) : Space n →L[ℝ] ℝ).hasFDerivAt
+
+theorem inner_gradient_graphFn_ed {Γ : (Fin n → ℝ) → ℝ} (hΓ : ContDiff ℝ ∞ Γ) (x : Space n) :
+    ⟪gradient (graphFn Γ) x, ed n⟫_ℝ = -1 := by
+  rw [inner_gradient_left, (hasFDerivAt_graphFn hΓ x).fderiv]
+  simp only [ContinuousLinearMap.sub_apply, ContinuousLinearMap.comp_apply, hproj_ed, map_zero]
+  simp [ed]
+
+theorem graphPt_eq (Γ : (Fin n → ℝ) → ℝ) (y : Fin n → ℝ) :
+    graphPt Γ y = F1.horiz n (WithLp.toLp 2 y) + Γ y • ed n :=
+  F1.lift_eq _ _
+
+theorem contDiff_graphPt {Γ : (Fin n → ℝ) → ℝ} (hΓ : ContDiff ℝ ∞ Γ) :
+    ContDiff ℝ ∞ (graphPt Γ) := by
+  have h : graphPt Γ = fun y => F1.horiz n (WithLp.toLp 2 y) + Γ y • ed n :=
+    funext (graphPt_eq Γ)
+  rw [h]
+  have h1 : ContDiff ℝ ∞ (fun y : Fin n → ℝ => (WithLp.toLp 2 y : EuclideanSpace ℝ (Fin n))) :=
+    (PiLp.continuousLinearEquiv 2 ℝ (fun _ : Fin n => ℝ)).symm.contDiff
+  exact ((F1.horiz n).contDiff.comp h1).add (hΓ.smul contDiff_const)
+
+/-- `toDual.symm` as a real continuous linear equivalence. -/
+noncomputable def toDualSymmCLE : StrongDual ℝ (Space n) ≃L[ℝ] Space n :=
+  ((toDual ℝ (Space n)).symm : StrongDual ℝ (Space n) ≃ₗᵢ⋆[ℝ] Space n).toContinuousLinearEquiv
+
+theorem contDiff_gradient_graphFn {Γ : (Fin n → ℝ) → ℝ} (hΓ : ContDiff ℝ ∞ Γ) :
+    ContDiff ℝ ∞ (gradient (graphFn Γ) : Space n → Space n) := by
+  have h1 : ContDiff ℝ ∞ (fderiv ℝ (graphFn Γ)) := (contDiff_graphFn hΓ).fderiv_right (by simp)
+  exact (toDualSymmCLE (n := n)).contDiff.comp h1
+
+theorem contDiff_collar0 {Γ : (Fin n → ℝ) → ℝ} (hΓ : ContDiff ℝ ∞ Γ)
+    {a : Space n → Space n →L[ℝ] Space n} (ha : ContDiff ℝ ∞ a) :
+    ContDiff ℝ ∞ (collar0 Γ a) := by
+  have hG : ContDiff ℝ ∞ (fun X : Space n => graphPt Γ (hproj n X)) :=
+    (contDiff_graphPt hΓ).comp (hproj n).contDiff
+  have hv : ContDiff ℝ ∞ (vcoord : Space n → ℝ) := by
+    rw [F1.vcoord_eq_proj]; exact (EuclideanSpace.proj (Fin.last n) : Space n →L[ℝ] ℝ).contDiff
+  have hN : ContDiff ℝ ∞ (fun X : Space n =>
+      a (graphPt Γ (hproj n X)) (innerNormal Γ (hproj n X))) :=
+    (ha.comp hG).clm_apply ((contDiff_gradient_graphFn hΓ).comp hG).neg
+  exact hG.add (hv.smul hN)
+
+theorem contDiff_conormalField {Γ : (Fin n → ℝ) → ℝ} (hΓ : ContDiff ℝ ∞ Γ)
+    {a : Space n → Space n →L[ℝ] Space n} (ha : ContDiff ℝ ∞ a) :
+    ContDiff ℝ ∞ (fun y => a (graphPt Γ y) (innerNormal Γ y)) :=
+  (ha.comp (contDiff_graphPt hΓ)).clm_apply
+    ((contDiff_gradient_graphFn hΓ).comp (contDiff_graphPt hΓ)).neg
+
+theorem hasFDerivAt_collar0 {Γ : (Fin n → ℝ) → ℝ} (hΓ : ContDiff ℝ ∞ Γ)
+    {a : Space n → Space n →L[ℝ] Space n} (ha : ContDiff ℝ ∞ a) (X : Space n) :
+    HasFDerivAt (collar0 Γ a)
+      ((fderiv ℝ (graphPt Γ) (hproj n X)).comp (hproj n) +
+        (vcoord X • (fderiv ℝ (fun y => a (graphPt Γ y) (innerNormal Γ y)) (hproj n X)).comp
+            (hproj n) +
+          (EuclideanSpace.proj (Fin.last n) : Space n →L[ℝ] ℝ).smulRight
+            (a (graphPt Γ (hproj n X)) (innerNormal Γ (hproj n X))))) X := by
+  have hG : HasFDerivAt (fun X => graphPt Γ (hproj n X))
+      ((fderiv ℝ (graphPt Γ) (hproj n X)).comp (hproj n)) X :=
+    ((contDiff_graphPt hΓ).differentiable (by simp) _).hasFDerivAt.comp X (hproj n).hasFDerivAt
+  have hN : HasFDerivAt (fun X => a (graphPt Γ (hproj n X)) (innerNormal Γ (hproj n X)))
+      ((fderiv ℝ (fun y => a (graphPt Γ y) (innerNormal Γ y)) (hproj n X)).comp (hproj n)) X :=
+    ((contDiff_conormalField hΓ ha).differentiable (by simp) _).hasFDerivAt.comp X
+      (hproj n).hasFDerivAt
+  have hv : HasFDerivAt (vcoord : Space n → ℝ)
+      (EuclideanSpace.proj (Fin.last n) : Space n →L[ℝ] ℝ) X := by
+    rw [F1.vcoord_eq_proj]; exact (EuclideanSpace.proj (Fin.last n) : Space n →L[ℝ] ℝ).hasFDerivAt
+  exact hG.add (hv.smul hN)
+
+/-- `∂_t F₀ = a(γ) ν̂`. -/
+theorem fderiv_collar0_ed {Γ : (Fin n → ℝ) → ℝ} (hΓ : ContDiff ℝ ∞ Γ)
+    {a : Space n → Space n →L[ℝ] Space n} (ha : ContDiff ℝ ∞ a) (X : Space n) :
+    fderiv ℝ (collar0 Γ a) X (ed n) =
+      a (graphPt Γ (hproj n X)) (innerNormal Γ (hproj n X)) := by
+  rw [(hasFDerivAt_collar0 hΓ ha X).fderiv]
+  have hpe : (EuclideanSpace.proj (Fin.last n) : Space n →L[ℝ] ℝ) (ed n) = 1 := vcoord_ed
+  simp only [ContinuousLinearMap.add_apply, ContinuousLinearMap.comp_apply,
+    ContinuousLinearMap.smul_apply, ContinuousLinearMap.smulRight_apply, hproj_ed, map_zero,
+    smul_zero, zero_add, hpe, one_smul]
+
+theorem inner_gradient_fderiv_graphPt {Γ : (Fin n → ℝ) → ℝ} (hΓ : ContDiff ℝ ∞ Γ)
+    (y k : Fin n → ℝ) :
+    ⟪gradient (graphFn Γ) (graphPt Γ y), fderiv ℝ (graphPt Γ) y k⟫_ℝ = 0 := by
+  rw [inner_gradient_left]
+  have h1 : fderiv ℝ (graphFn Γ ∘ graphPt Γ) y =
+      fderiv ℝ (graphFn Γ) (graphPt Γ y) ∘L fderiv ℝ (graphPt Γ) y :=
+    (((contDiff_graphFn hΓ).differentiable (by simp) _).hasFDerivAt.comp y
+      ((contDiff_graphPt hΓ).differentiable (by simp) _).hasFDerivAt).fderiv
+  have h2 : (graphFn Γ ∘ graphPt Γ) = fun _ => (0 : ℝ) := funext (graphFn_graphPt Γ)
+  rw [h2, fderiv_const_apply] at h1
+  have h3 := congrArg (fun L : (Fin n → ℝ) →L[ℝ] ℝ => L k) h1
+  simp only [Pi.zero_apply, ContinuousLinearMap.zero_apply, ContinuousLinearMap.comp_apply] at h3
+  exact h3.symm
+
+/-- Tangency: on `{t = 0}`, `DF₀` maps horizontal vectors into the tangent space of the graph
+(derivative of `graphFn Γ ∘ graphPt Γ = 0`). -/
+theorem inner_gradient_fderiv_collar0_horizontal {Γ : (Fin n → ℝ) → ℝ} (hΓ : ContDiff ℝ ∞ Γ)
+    {a : Space n → Space n →L[ℝ] Space n} (ha : ContDiff ℝ ∞ a) {X h : Space n}
+    (hX : vcoord X = 0) (hh : vcoord h = 0) :
+    ⟪gradient (graphFn Γ) (collar0 Γ a X), fderiv ℝ (collar0 Γ a) X h⟫_ℝ = 0 := by
+  rw [(hasFDerivAt_collar0 hΓ ha X).fderiv, collar0_of_vcoord_eq_zero Γ a hX]
+  have hph : (EuclideanSpace.proj (Fin.last n) : Space n →L[ℝ] ℝ) h = 0 := hh
+  simp only [ContinuousLinearMap.add_apply, ContinuousLinearMap.comp_apply,
+    ContinuousLinearMap.smul_apply, ContinuousLinearMap.smulRight_apply, hX, hph, zero_smul,
+    add_zero]
+  exact inner_gradient_fderiv_graphPt hΓ _ _
+
+/-- `DF₀(0)` is invertible: test `DF₀(0) h = 0` against `∇ graphFn` (tangency and
+`⟪∇g, a(0) ν̂⟫ = -⟪a ν̂, ν̂⟫ < 0`) to get `vcoord h = 0`, then read off the horizontal
+coordinates. -/
+theorem isInvertible_fderiv_collar0_zero {Γ : (Fin n → ℝ) → ℝ} (hΓ : ContDiff ℝ ∞ Γ)
+    (hΓ0 : Γ 0 = 0) {a : Space n → Space n →L[ℝ] Space n} (ha : ContDiff ℝ ∞ a)
+    (ha_ell : ∃ lam > 0, ∀ x ξ, lam * ‖ξ‖ ^ 2 ≤ ⟪a x ξ, ξ⟫_ℝ) :
+    (fderiv ℝ (collar0 Γ a) 0).IsInvertible := by
+  obtain ⟨lam, hlam, hell⟩ := ha_ell
+  have hv0 : vcoord (0 : Space n) = 0 := by simp [vcoord]
+  have hπ0 : hproj n (0 : Space n) = 0 := map_zero _
+  have hG0 : graphPt Γ (0 : Fin n → ℝ) = 0 := by
+    have := collar0_zero Γ hΓ0 a
+    rwa [collar0_of_vcoord_eq_zero Γ a hv0, hπ0] at this
+  set g0 := gradient (graphFn Γ) (0 : Space n) with hg0
+  have hT : ∀ h, fderiv ℝ (collar0 Γ a) 0 h =
+      fderiv ℝ (graphPt Γ) 0 (hproj n h) + vcoord h • a 0 (-g0) := by
+    intro h
+    rw [(hasFDerivAt_collar0 hΓ ha 0).fderiv]
+    simp only [ContinuousLinearMap.add_apply, ContinuousLinearMap.comp_apply,
+      ContinuousLinearMap.smul_apply, ContinuousLinearMap.smulRight_apply, hv0, zero_smul,
+      zero_add, hπ0, innerNormal, hG0]
+    rfl
+  have hpos0 : 0 < ⟪a 0 g0, g0⟫_ℝ := by
+    have hne : g0 ≠ 0 := by
+      intro h
+      have := inner_gradient_graphFn_ed hΓ (0 : Space n)
+      rw [← hg0, h, inner_zero_left] at this
+      norm_num at this
+    have h1 := hell 0 g0
+    have h2 : 0 < ‖g0‖ := norm_pos_iff.mpr hne
+    have h3 : 0 < lam * ‖g0‖ ^ 2 := by positivity
+    linarith
+  have htan : ∀ k, ⟪g0, fderiv ℝ (graphPt Γ) 0 k⟫_ℝ = 0 := by
+    intro k
+    have := inner_gradient_fderiv_graphPt hΓ (0 : Fin n → ℝ) k
+    rwa [hG0] at this
+  have hproj_d : ∀ k, hproj n (fderiv ℝ (graphPt Γ) 0 k) = k := by
+    intro k
+    have h1 : fderiv ℝ (hproj n ∘ graphPt Γ) 0 = (hproj n) ∘L fderiv ℝ (graphPt Γ) 0 :=
+      ((hproj n).hasFDerivAt.comp 0
+        ((contDiff_graphPt hΓ).differentiable (by simp) 0).hasFDerivAt).fderiv
+    have h2 : hproj n ∘ graphPt Γ = id := funext fun y => by
+      funext i; rw [Function.comp_apply, hproj_apply, graphPt_apply_castSucc]; rfl
+    rw [h2, fderiv_id] at h1
+    have h3 := congrArg (fun L : (Fin n → ℝ) →L[ℝ] (Fin n → ℝ) => L k) h1
+    simp only [ContinuousLinearMap.id_apply, ContinuousLinearMap.comp_apply] at h3
+    exact h3.symm
+  have hinj : Function.Injective (fderiv ℝ (collar0 Γ a) 0) := by
+    intro h₁ h₂ heq
+    have hTh : fderiv ℝ (collar0 Γ a) 0 (h₁ - h₂) = 0 := by rw [map_sub, heq, sub_self]
+    rw [hT] at hTh
+    have hd : vcoord (h₁ - h₂) = 0 := by
+      have h1 := congrArg (fun v => ⟪g0, v⟫_ℝ) hTh
+      simp only [inner_add_right, real_inner_smul_right, htan, zero_add, map_neg,
+        inner_neg_right, inner_zero_right] at h1
+      have h2 : ⟪g0, a 0 g0⟫_ℝ ≠ 0 := by rw [real_inner_comm]; exact hpos0.ne'
+      simp only [mul_neg, neg_eq_zero, mul_eq_zero] at h1
+      rcases h1 with h | h
+      · exact h
+      · exact absurd h h2
+    have hh : hproj n (h₁ - h₂) = 0 := by
+      rw [hd, zero_smul, add_zero] at hTh
+      have := congrArg (hproj n) hTh
+      rwa [hproj_d, map_zero] at this
+    rw [← sub_eq_zero]
+    ext i
+    refine Fin.lastCases ?_ (fun j => ?_) i
+    · simpa [vcoord] using hd
+    · have := congrFun hh j
+      simpa [hproj_apply] using this
+  let e := LinearEquiv.ofInjectiveEndo
+    ((fderiv ℝ (collar0 Γ a) 0 : Space n →L[ℝ] Space n) : Space n →ₗ[ℝ] Space n) hinj
+  exact ⟨e.toContinuousLinearEquiv, ContinuousLinearMap.ext fun x => rfl⟩
+
 /-- The conormal collar `F₀` and its first order properties. Construction:
 `F₀ X = γ (π X) + vcoord X • a (γ (π X)) (ν̂ (π X))` with `π X = (X (castSucc i))ᵢ`,
 `γ y = toLp (Fin.snoc y (Γ y))` and `ν̂ y = - gradient (graphFn Γ) (γ y)`. -/
@@ -275,7 +553,191 @@ theorem exists_collar0 (Γ : (Fin n → ℝ) → ℝ) (hΓ : ContDiff ℝ ∞ Γ
           ∀ w, ⟪(fderiv ℝ F₀ X).inverse w, ed n⟫_ℝ = μ * ⟪w, outerNormal Γ (F₀ X)⟫_ℝ) ∧
         (∀ X ∈ Metric.ball (0 : Space n) r, vcoord X = 0 →
           ∃ s : ℝ, a (F₀ X) (outerNormal Γ (F₀ X)) = s • fderiv ℝ F₀ X (ed n)) := by
-  sorry
+  obtain ⟨lam, hlam, hell⟩ := ha_ell
+  have hF₀s : ContDiff ℝ ∞ (collar0 Γ a) := contDiff_collar0 hΓ ha
+  have hgc : Continuous (gradient (graphFn Γ) : Space n → Space n) :=
+    (contDiff_gradient_graphFn hΓ).continuous
+  have hgne : ∀ x : Space n, gradient (graphFn Γ) x ≠ 0 := by
+    intro x h
+    have := inner_gradient_graphFn_ed hΓ x
+    rw [h, inner_zero_left] at this
+    norm_num at this
+  have hgnorm : ∀ x : Space n, 0 < ‖gradient (graphFn Γ) x‖ := fun x =>
+    norm_pos_iff.mpr (hgne x)
+  have hnc : Continuous (fun X => outerNormal Γ (collar0 Γ a X)) := by
+    unfold outerNormal
+    have h1 : Continuous (fun X => gradient (graphFn Γ) (collar0 Γ a X)) :=
+      hgc.comp hF₀s.continuous
+    exact ((continuous_norm.comp h1).inv₀ (fun X => (hgnorm _).ne')).smul h1
+  have hDF₀c : Continuous (fderiv ℝ (collar0 Γ a)) := hF₀s.continuous_fderiv (by simp)
+  have hF₀0 : collar0 Γ a 0 = 0 := collar0_zero Γ hΓ0 a
+  have hv0 : vcoord (0 : Space n) = 0 := by simp [vcoord]
+  have hπ0 : hproj n (0 : Space n) = 0 := map_zero _
+  have hG0 : graphPt Γ (0 : Fin n → ℝ) = 0 := by
+    have := collar0_zero Γ hΓ0 a
+    rwa [collar0_of_vcoord_eq_zero Γ a hv0, hπ0] at this
+  have hDe0 : fderiv ℝ (collar0 Γ a) 0 (ed n) = -(a 0 (gradient (graphFn Γ) 0)) := by
+    rw [fderiv_collar0_ed hΓ ha, hπ0, innerNormal, hG0, map_neg]
+  have hpos0 : 0 < ⟪a 0 (gradient (graphFn Γ) 0), gradient (graphFn Γ) 0⟫_ℝ := by
+    have h1 := hell 0 (gradient (graphFn Γ) 0)
+    have h2 := hgnorm 0
+    have h3 : 0 < lam * ‖gradient (graphFn Γ) (0 : Space n)‖ ^ 2 := by positivity
+    linarith
+  -- (i) invertibility near `0`
+  have hinv0 := isInvertible_fderiv_collar0_zero hΓ hΓ0 ha ⟨lam, hlam, hell⟩
+  have hopen : IsOpen {X : Space n | (fderiv ℝ (collar0 Γ a) X).IsInvertible} :=
+    ContinuousLinearEquiv.isOpen.preimage hDF₀c
+  obtain ⟨r₁, hr₁, hr₁sub⟩ := Metric.isOpen_iff.mp hopen 0 hinv0
+  -- (ii) transversality
+  have hφ : ∀ X, fderiv ℝ (fun Y => graphFn Γ (collar0 Γ a Y)) X (ed n) =
+      ⟪gradient (graphFn Γ) (collar0 Γ a X), fderiv ℝ (collar0 Γ a) X (ed n)⟫_ℝ := by
+    intro X
+    have h1 := (((contDiff_graphFn hΓ).differentiable (by simp) (collar0 Γ a X)).hasFDerivAt.comp
+      X ((hF₀s.differentiable (by simp)) X).hasFDerivAt).fderiv
+    show fderiv ℝ (graphFn Γ ∘ collar0 Γ a) X (ed n) = _
+    rw [h1, ContinuousLinearMap.comp_apply, inner_gradient_left]
+  have hφc : Continuous (fun X =>
+      ⟪gradient (graphFn Γ) (collar0 Γ a X), fderiv ℝ (collar0 Γ a) X (ed n)⟫_ℝ) :=
+    (hgc.comp hF₀s.continuous).inner (hDF₀c.clm_apply continuous_const)
+  have hφ0 : ⟪gradient (graphFn Γ) (collar0 Γ a 0), fderiv ℝ (collar0 Γ a) 0 (ed n)⟫_ℝ < 0 := by
+    rw [hDe0, hF₀0, inner_neg_right, real_inner_comm]
+    linarith
+  obtain ⟨r₂, hr₂, hr₂sub⟩ := Metric.isOpen_iff.mp (isOpen_lt hφc continuous_const) 0 hφ0
+  -- (iii) the normal relation
+  have hψc : Continuous (fun X =>
+      ⟪outerNormal Γ (collar0 Γ a X), fderiv ℝ (collar0 Γ a) X (ed n)⟫_ℝ) :=
+    hnc.inner (hDF₀c.clm_apply continuous_const)
+  have hψ0 : ⟪outerNormal Γ (collar0 Γ a 0), fderiv ℝ (collar0 Γ a) 0 (ed n)⟫_ℝ < 0 := by
+    rw [hDe0, hF₀0, outerNormal, inner_neg_right, real_inner_smul_left, real_inner_comm]
+    have := inv_pos.mpr (hgnorm 0)
+    have := mul_pos this hpos0
+    linarith
+  set ψ0 := ⟪outerNormal Γ (collar0 Γ a 0), fderiv ℝ (collar0 Γ a) 0 (ed n)⟫_ℝ with hψ0def
+  obtain ⟨r₃, hr₃, hr₃sub⟩ := Metric.isOpen_iff.mp (isOpen_lt hψc continuous_const) 0
+    (show _ < ψ0 / 2 by linarith)
+  refine ⟨collar0 Γ a, hF₀s, hF₀0, fun X hX => graphFn_collar0_flat Γ a hX,
+    min r₁ (min r₂ r₃), lt_min hr₁ (lt_min hr₂ hr₃), 2 / |ψ0|, ?_, ?_, ?_, ?_⟩
+  · intro X hX
+    exact hr₁sub (Metric.ball_subset_ball (min_le_left _ _) hX)
+  · intro X hX
+    rw [hφ]
+    exact hr₂sub (Metric.ball_subset_ball ((min_le_right _ _).trans (min_le_left _ _)) hX)
+  · intro X hX hXv
+    have hXinv : (fderiv ℝ (collar0 Γ a) X).IsInvertible :=
+      hr₁sub (Metric.ball_subset_ball (min_le_left _ _) hX)
+    have hψX : ⟪outerNormal Γ (collar0 Γ a X), fderiv ℝ (collar0 Γ a) X (ed n)⟫_ℝ < ψ0 / 2 :=
+      hr₃sub (Metric.ball_subset_ball ((min_le_right _ _).trans (min_le_right _ _)) hX)
+    set ψX := ⟪outerNormal Γ (collar0 Γ a X), fderiv ℝ (collar0 Γ a) X (ed n)⟫_ℝ with hψXdef
+    have hψXneg : ψX < 0 := by linarith
+    refine ⟨ψX⁻¹, ?_, fun w => ?_⟩
+    · rw [abs_inv]
+      have h1 : |ψ0| / 2 ≤ |ψX| := by
+        rw [abs_of_neg hψ0, abs_of_neg hψXneg]; linarith
+      have h2 : 0 < |ψ0| := abs_pos.mpr hψ0.ne
+      calc |ψX|⁻¹ ≤ (|ψ0| / 2)⁻¹ := inv_anti₀ (by positivity) h1
+        _ = 2 / |ψ0| := by rw [inv_div]
+    · obtain ⟨z, hzdef⟩ : ∃ z, z = (fderiv ℝ (collar0 Γ a) X).inverse w := ⟨_, rfl⟩
+      rw [← hzdef]
+      have hw : w = fderiv ℝ (collar0 Γ a) X z := by
+        rw [hzdef, hXinv.self_apply_inverse]
+      obtain ⟨h, hhdef⟩ : ∃ h, h = z - vcoord z • ed n := ⟨_, rfl⟩
+      have hh : vcoord h = 0 := by
+        rw [hhdef]; simp [vcoord, ed]
+      have hz : z = vcoord z • ed n + h := by
+        rw [hhdef, add_sub_cancel]
+      have htan : ⟪outerNormal Γ (collar0 Γ a X), fderiv ℝ (collar0 Γ a) X h⟫_ℝ = 0 := by
+        rw [outerNormal, real_inner_smul_left,
+          inner_gradient_fderiv_collar0_horizontal hΓ ha hXv hh, mul_zero]
+      have hnw : ⟪w, outerNormal Γ (collar0 Γ a X)⟫_ℝ = vcoord z * ψX := by
+        conv_lhs => rw [hw, hz]
+        rw [map_add, map_smul, inner_add_left, real_inner_smul_left,
+          real_inner_comm (outerNormal Γ (collar0 Γ a X)) (fderiv ℝ (collar0 Γ a) X h), htan,
+          add_zero, hψXdef, real_inner_comm]
+      have hze : ⟪z, ed n⟫_ℝ = vcoord z := F1.inner_ed z
+      rw [hnw, hze, inv_mul_eq_div, mul_div_assoc, div_self hψXneg.ne, mul_one]
+  · intro X _ hXv
+    refine ⟨-(‖gradient (graphFn Γ) (collar0 Γ a X)‖)⁻¹, ?_⟩
+    rw [fderiv_collar0_ed hΓ ha X, outerNormal, map_smul]
+    conv_lhs => rw [collar0_of_vcoord_eq_zero Γ a hXv]
+    rw [innerNormal, map_neg, smul_neg, neg_smul]
+    conv_rhs => rw [collar0_of_vcoord_eq_zero Γ a hXv]
+    rw [neg_neg]
+
+/-- Symmetric square root of a symmetric positive definite operator which preserves the vertical
+direction (spectral theorem). -/
+theorem exists_sqrt (S : Space n →L[ℝ] Space n) (hS : ∀ ξ η, ⟪S ξ, η⟫_ℝ = ⟪ξ, S η⟫_ℝ)
+    (hpos : ∀ ξ, ξ ≠ 0 → 0 < ⟪S ξ, ξ⟫_ℝ) (s : ℝ) (hs : S (ed n) = s • ed n) :
+    ∃ L : Space n →L[ℝ] Space n, L.IsInvertible ∧ (∀ ξ η, ⟪L ξ, η⟫_ℝ = ⟪ξ, L η⟫_ℝ) ∧
+      (∀ x, L (L x) = S x) ∧ L (ed n) = Real.sqrt s • ed n := by
+  have hT : (S : Space n →ₗ[ℝ] Space n).IsSymmetric := fun x y => hS x y
+  have hd : Module.finrank ℝ (Space n) = n + 1 := by simp
+  set b := hT.eigenvectorBasis hd with hbdef
+  set lam := hT.eigenvalues hd with hlamdef
+  have hb : ∀ i, S (b i) = lam i • b i := fun i => by
+    exact hT.apply_eigenvectorBasis hd i
+  have hon : Orthonormal ℝ b := b.orthonormal
+  have hlam : ∀ i, 0 < lam i := by
+    intro i
+    have h1 := hpos (b i) (hon.ne_zero i)
+    rw [hb i, real_inner_smul_left, real_inner_self_eq_norm_sq, hon.1 i] at h1
+    simpa using h1
+  let D : (Fin (n + 1) → ℝ) → Space n →L[ℝ] Space n := fun c => LinearMap.toContinuousLinearMap
+    { toFun := fun x => ∑ i, (c i * ⟪b i, x⟫_ℝ) • b i
+      map_add' := fun x y => by
+        simp only [inner_add_right, mul_add, add_smul, Finset.sum_add_distrib]
+      map_smul' := fun r x => by
+        simp only [real_inner_smul_right, RingHom.id_apply, Finset.smul_sum, smul_smul]
+        congr 1
+        ext i
+        ring_nf }
+  have hD : ∀ c x, D c x = ∑ i, (c i * ⟪b i, x⟫_ℝ) • b i := fun c x => rfl
+  have hDb : ∀ c x j, ⟪b j, D c x⟫_ℝ = c j * ⟪b j, x⟫_ℝ := fun c x j => by
+    rw [hD]; exact hon.inner_right_fintype _ j
+  have hext : ∀ x y : Space n, (∀ j, ⟪b j, x⟫_ℝ = ⟪b j, y⟫_ℝ) → x = y := fun x y h =>
+    ext_inner_left_basis b.toBasis (fun j => by rw [b.coe_toBasis]; exact h j)
+  have hDD : ∀ c c' x, D c (D c' x) = D (fun i => c i * c' i) x := by
+    intro c c' x; apply hext; intro j; rw [hDb, hDb, hDb]; ring
+  have hD1 : ∀ x, D (fun _ => 1) x = x := by
+    intro x; apply hext; intro j; rw [hDb, one_mul]
+  have hDS : ∀ x, D lam x = S x := by
+    intro x; apply hext; intro j
+    rw [hDb, ← real_inner_comm (b j) (S x), hS, hb j, real_inner_smul_right, real_inner_comm]
+  have hDsymm : ∀ c ξ η, ⟪D c ξ, η⟫_ℝ = ⟪ξ, D c η⟫_ℝ := by
+    intro c ξ η
+    rw [hD, hD, sum_inner, inner_sum]
+    congr 1
+    ext i
+    rw [real_inner_smul_left, real_inner_smul_right, real_inner_comm (b i) ξ]
+    ring
+  refine ⟨D (fun i => Real.sqrt (lam i)), ?_, hDsymm _, ?_, ?_⟩
+  · refine ContinuousLinearMap.IsInvertible.of_inverse (g := D (fun i => (Real.sqrt (lam i))⁻¹))
+      ?_ ?_
+    · ext1 x
+      rw [ContinuousLinearMap.comp_apply, hDD, ContinuousLinearMap.id_apply]
+      conv_rhs => rw [← hD1 x]
+      congr 2
+      ext i
+      exact mul_inv_cancel₀ (Real.sqrt_pos.mpr (hlam i)).ne'
+    · ext1 x
+      rw [ContinuousLinearMap.comp_apply, hDD, ContinuousLinearMap.id_apply]
+      conv_rhs => rw [← hD1 x]
+      congr 2
+      ext i
+      exact inv_mul_cancel₀ (Real.sqrt_pos.mpr (hlam i)).ne'
+  · intro x
+    rw [hDD, ← hDS]
+    congr 2
+    ext i
+    exact Real.mul_self_sqrt (hlam i).le
+  · apply hext
+    intro j
+    rw [hDb, real_inner_smul_right]
+    have h1 : lam j * ⟪b j, ed n⟫_ℝ = s * ⟪b j, ed n⟫_ℝ := by
+      rw [← real_inner_smul_left, ← hb j, hS, hs, real_inner_smul_right]
+    by_cases h0 : ⟪b j, ed n⟫_ℝ = 0
+    · rw [h0, mul_zero, mul_zero]
+    · have : lam j = s := mul_right_cancel₀ h0 h1
+      rw [this]
 
 /-- The linear normalization: a block-diagonal symmetric `L` with
 `M L Lᵀ Mᵀ = a₀`, provided `M⁻¹ a₀ M⁻ᵀ` preserves the vertical direction. -/
@@ -286,7 +748,43 @@ theorem exists_normalization (M : Space n →L[ℝ] Space n) (hM : M.IsInvertibl
     ∃ L : Space n →L[ℝ] Space n, L.IsInvertible ∧ (∀ ξ η, ⟪L ξ, η⟫_ℝ = ⟪ξ, L η⟫_ℝ) ∧
       (∃ ℓ : ℝ, 0 < ℓ ∧ L (ed n) = ℓ • ed n) ∧
       M ∘L L ∘L ContinuousLinearMap.adjoint L ∘L ContinuousLinearMap.adjoint M = a₀ := by
-  sorry
+  obtain ⟨s, hs⟩ := hblock
+  set S : Space n →L[ℝ] Space n :=
+    M.inverse ∘L a₀ ∘L ContinuousLinearMap.adjoint M.inverse with hSdef
+  have hSapp : ∀ ξ, S ξ = M.inverse (a₀ (ContinuousLinearMap.adjoint M.inverse ξ)) := fun ξ => rfl
+  have hSsymm : ∀ ξ η, ⟪S ξ, η⟫_ℝ = ⟪ξ, S η⟫_ℝ := by
+    intro ξ η
+    rw [hSapp, hSapp, ← ContinuousLinearMap.adjoint_inner_right, ha₀_symm,
+      ContinuousLinearMap.adjoint_inner_left]
+  have hSpos : ∀ ξ, ξ ≠ 0 → 0 < ⟪S ξ, ξ⟫_ℝ := by
+    intro ξ hξ
+    rw [hSapp, ← ContinuousLinearMap.adjoint_inner_right]
+    apply ha₀_pos
+    intro h0
+    apply hξ
+    rw [← adjoint_adjoint_inverse_apply hM ξ, h0, map_zero]
+  have hSe : S (ed n) = s • ed n := hs
+  obtain ⟨L, hLinv, hLsymm, hLL, hLe⟩ := exists_sqrt S hSsymm hSpos s hSe
+  have hed : ⟪ed n, ed n⟫_ℝ = 1 := by
+    rw [F1.inner_ed]; simp [ed]
+  have hspos : 0 < s := by
+    have h1 := hSpos (ed n) (by
+      intro h
+      have := congrArg (fun v : Space n => ⟪v, ed n⟫_ℝ) h
+      simp only [inner_zero_left] at this
+      rw [hed] at this
+      exact one_ne_zero this)
+    rw [hSe, real_inner_smul_left, hed, mul_one] at h1
+    exact h1
+  refine ⟨L, hLinv, hLsymm, ⟨Real.sqrt s, Real.sqrt_pos.mpr hspos, hLe⟩, ?_⟩
+  have hLadj : ∀ η, ContinuousLinearMap.adjoint L η = L η := by
+    intro η
+    apply ext_inner_right ℝ
+    intro ζ
+    rw [ContinuousLinearMap.adjoint_inner_left, hLsymm]
+  ext1 ξ
+  simp only [ContinuousLinearMap.comp_apply]
+  rw [hLadj, hLL, hSapp, adjoint_inverse_adjoint_apply hM, hM.self_apply_inverse]
 
 /-- Sign of a function vanishing on `{t = 0}` with negative vertical derivative. -/
 theorem sign_of_vertical (φ : Space n → ℝ) (hφ : ContDiff ℝ 1 φ) (r : ℝ)
@@ -558,7 +1056,253 @@ theorem exists_collarMap (hn : 0 < n) (Γ : (Fin n → ℝ) → ℝ) (hΓ : Cont
   · rw [hDF, map_zero, ContinuousLinearMap.adjoint_comp, ← hLa]
     rfl
 
-/-! ### Part 2: the transformed equation -/
+/-! ### Part 2: the transformed equation
+
+Write `v = u ∘ F`, `P X = DF(X)⁻¹`, `Q X = P Xᵀ` (so `∇u(F X) = Q X ∇v(X)`) and `Ã = tildeA F a`.
+For a `C¹` field `A` and a `C²` function `w`,
+`div (A ∇w) = tr (h ↦ DA h ∇w) + tr (A ∘ D∇w)` (`T1`). By the chain rule
+`∇v = DFᵀ (∇u ∘ F)` near `X`, hence `D∇v h = D(DFᵀ) h (∇u ∘ F) + DFᵀ D∇u(F X) DF h` (`T2`), and
+`tr (Ã DFᵀ D∇u DF) = tr (DF Ã DFᵀ D∇u) = tr (a D∇u)` by cyclicity of the trace (`T3`). Using the
+equation for `u` at `F X` this gives `div (Ã ∇v) = firstOrderFun X (∇v) - (c ∘ F) v`
+(`divergence_tildeA_eq`), where `firstOrderFun X` is the linear functional below; `tildeB` is its
+Riesz representative (with a minus sign).
+-/
+
+/-- `Q X = (DF(X)⁻¹)ᵀ`, so that `∇u(F X) = Q X (∇(u ∘ F) X)`. -/
+noncomputable def invAdj (F : Space n → Space n) (X : Space n) : Space n →L[ℝ] Space n :=
+  ContinuousLinearMap.adjoint (fderiv ℝ F X).inverse
+
+/-- The trace of `h ↦ T h w` for a bilinear `T`. -/
+noncomputable def traceFlip (T : Space n →L[ℝ] Space n →L[ℝ] Space n) (w : Space n) : ℝ :=
+  LinearMap.trace ℝ (Space n) ((T.flip w : Space n →L[ℝ] Space n) : Space n →ₗ[ℝ] Space n)
+
+/-- The linear functional collecting the first order terms of the transformed equation. -/
+noncomputable def firstOrderFun (F : Space n → Space n) (a : Space n → Space n →L[ℝ] Space n)
+    (b : Space n → Space n) (X w : Space n) : ℝ :=
+  traceFlip (fderiv ℝ (tildeA F a) X) w
+    + LinearMap.trace ℝ (Space n) ((tildeA F a X ∘L
+        (fderiv ℝ (fun Y => ContinuousLinearMap.adjoint (fderiv ℝ F Y)) X).flip (invAdj F X w) :
+        Space n →L[ℝ] Space n) : Space n →ₗ[ℝ] Space n)
+    - traceFlip (fderiv ℝ a (F X)) (invAdj F X w)
+    - ⟪b (F X), invAdj F X w⟫_ℝ
+
+/-- The transformed first order coefficient: minus the Riesz representative of
+`firstOrderFun F a b X`. -/
+noncomputable def tildeB (F : Space n → Space n) (a : Space n → Space n →L[ℝ] Space n)
+    (b : Space n → Space n) (X : Space n) : Space n :=
+  -∑ j : Fin (n + 1), firstOrderFun F a b X (EuclideanSpace.single j 1) • EuclideanSpace.single j 1
+
+theorem trace_eq_sum_basis (T : Space n →L[ℝ] Space n) :
+    LinearMap.trace ℝ (Space n) (T : Space n →ₗ[ℝ] Space n) =
+      ∑ i, ⟪EuclideanSpace.basisFun (Fin (n + 1)) ℝ i,
+        T (EuclideanSpace.basisFun (Fin (n + 1)) ℝ i)⟫_ℝ := by
+  rw [LinearMap.trace_eq_sum_inner _ (EuclideanSpace.basisFun (Fin (n + 1)) ℝ)]
+  rfl
+
+theorem firstOrderFun_add (F : Space n → Space n) (a : Space n → Space n →L[ℝ] Space n)
+    (b : Space n → Space n) (X w₁ w₂ : Space n) :
+    firstOrderFun F a b X (w₁ + w₂) = firstOrderFun F a b X w₁ + firstOrderFun F a b X w₂ := by
+  simp only [firstOrderFun, traceFlip, trace_eq_sum_basis, ContinuousLinearMap.flip_apply,
+    ContinuousLinearMap.comp_apply, map_add, ContinuousLinearMap.add_apply, inner_add_right,
+    Finset.sum_add_distrib]
+  ring
+
+theorem firstOrderFun_smul (F : Space n → Space n) (a : Space n → Space n →L[ℝ] Space n)
+    (b : Space n → Space n) (X : Space n) (r : ℝ) (w : Space n) :
+    firstOrderFun F a b X (r • w) = r * firstOrderFun F a b X w := by
+  simp only [firstOrderFun, traceFlip, trace_eq_sum_basis, ContinuousLinearMap.flip_apply,
+    ContinuousLinearMap.comp_apply, map_smul, ContinuousLinearMap.smul_apply,
+    real_inner_smul_right, ← Finset.mul_sum]
+  ring
+
+theorem sum_single_inner (f : Space n →ₗ[ℝ] ℝ) (w : Space n) :
+    ∑ j : Fin (n + 1), f (EuclideanSpace.single j 1) * ⟪EuclideanSpace.single j 1, w⟫_ℝ =
+      f w := by
+  have h := (EuclideanSpace.basisFun (Fin (n + 1)) ℝ).sum_repr' w
+  conv_rhs => rw [← h]
+  rw [map_sum]
+  refine Finset.sum_congr rfl fun j _ => ?_
+  rw [map_smul, smul_eq_mul, mul_comm, EuclideanSpace.basisFun_apply]
+
+theorem inner_tildeB (F : Space n → Space n) (a : Space n → Space n →L[ℝ] Space n)
+    (b : Space n → Space n) (X w : Space n) :
+    ⟪tildeB F a b X, w⟫_ℝ = -firstOrderFun F a b X w := by
+  let f : Space n →ₗ[ℝ] ℝ :=
+    { toFun := firstOrderFun F a b X
+      map_add' := firstOrderFun_add F a b X
+      map_smul' := fun r w => by rw [firstOrderFun_smul]; rfl }
+  have hlin := sum_single_inner f w
+  rw [tildeB, inner_neg_left, sum_inner]
+  simp only [real_inner_smul_left]
+  exact congrArg Neg.neg hlin
+
+theorem continuousOn_tildeB (F : Space n → Space n) (hF : ContDiff ℝ ∞ F)
+    (a : Space n → Space n →L[ℝ] Space n) (ha : ContDiff ℝ ∞ a)
+    (b : Space n → Space n) (hb : Continuous b) (R₀ : ℝ)
+    (hinv : ∀ X ∈ Metric.ball (0 : Space n) R₀, (fderiv ℝ F X).IsInvertible) :
+    ContinuousOn (tildeB F a b) (Metric.ball 0 R₀) := by
+  have hU : IsOpen (Metric.ball (0 : Space n) R₀) := Metric.isOpen_ball
+  have hDF : ContDiff ℝ ∞ (fderiv ℝ F) := hF.fderiv_right (by simp)
+  have hÃ : ContDiffOn ℝ 2 (tildeA F a) (Metric.ball 0 R₀) :=
+    contDiffOn_tildeA F hF a ha _ hU hinv
+  have hÃc : ContinuousOn (tildeA F a) (Metric.ball 0 R₀) := hÃ.continuousOn
+  have hDÃc : ContinuousOn (fun X => fderiv ℝ (tildeA F a) X) (Metric.ball 0 R₀) :=
+    hÃ.continuousOn_fderiv_of_isOpen hU (by norm_num)
+  have hD'c : Continuous
+      (fun X => fderiv ℝ (fun Y => ContinuousLinearMap.adjoint (fderiv ℝ F Y)) X) :=
+    ((adjointCLE (n := n)).contDiff.comp hDF).continuous_fderiv (by simp)
+  have hQc : ContinuousOn (invAdj F) (Metric.ball 0 R₀) := by
+    intro X hX
+    obtain ⟨e, he⟩ := hinv X hX
+    have h1 : ContinuousAt ContinuousLinearMap.inverse (fderiv ℝ F X) := by
+      rw [← he]; exact (contDiffAt_map_inverse (n := 1) e).continuousAt
+    exact ((adjointCLE (n := n)).continuous.continuousAt.comp
+      (h1.comp hDF.continuous.continuousAt)).continuousWithinAt
+  have hDac : Continuous (fun X => fderiv ℝ a (F X)) :=
+    (ha.continuous_fderiv (by simp)).comp hF.continuous
+  have hbc : Continuous (fun X => b (F X)) := hb.comp hF.continuous
+  have hfo : ∀ w, ContinuousOn (fun X => firstOrderFun F a b X w) (Metric.ball 0 R₀) := by
+    intro w
+    have heq : (fun X => firstOrderFun F a b X w) = fun X =>
+        (∑ i, ⟪EuclideanSpace.basisFun (Fin (n + 1)) ℝ i,
+          fderiv ℝ (tildeA F a) X (EuclideanSpace.basisFun (Fin (n + 1)) ℝ i) w⟫_ℝ) +
+        (∑ i, ⟪EuclideanSpace.basisFun (Fin (n + 1)) ℝ i, tildeA F a X
+          (fderiv ℝ (fun Y => ContinuousLinearMap.adjoint (fderiv ℝ F Y)) X
+            (EuclideanSpace.basisFun (Fin (n + 1)) ℝ i) (invAdj F X w))⟫_ℝ) -
+        (∑ i, ⟪EuclideanSpace.basisFun (Fin (n + 1)) ℝ i,
+          fderiv ℝ a (F X) (EuclideanSpace.basisFun (Fin (n + 1)) ℝ i) (invAdj F X w)⟫_ℝ) -
+        ⟪b (F X), invAdj F X w⟫_ℝ := by
+      funext X
+      simp only [firstOrderFun, traceFlip, trace_eq_sum_basis, ContinuousLinearMap.flip_apply,
+        ContinuousLinearMap.comp_apply]
+    rw [heq]
+    refine (((continuousOn_finsetSum _ fun i _ => ?_).add
+      (continuousOn_finsetSum _ fun i _ => ?_)).sub (continuousOn_finsetSum _ fun i _ => ?_)).sub
+        ?_
+    · exact continuousOn_const.inner
+        ((hDÃc.clm_apply continuousOn_const).clm_apply continuousOn_const)
+    · exact continuousOn_const.inner (hÃc.clm_apply
+        ((hD'c.continuousOn.clm_apply continuousOn_const).clm_apply
+          (hQc.clm_apply continuousOn_const)))
+    · exact continuousOn_const.inner ((hDac.continuousOn.clm_apply continuousOn_const).clm_apply
+        (hQc.clm_apply continuousOn_const))
+    · exact hbc.continuousOn.inner (hQc.clm_apply continuousOn_const)
+  have hB : tildeB F a b = fun X => -∑ j : Fin (n + 1),
+      firstOrderFun F a b X (EuclideanSpace.single j 1) • EuclideanSpace.single j 1 := rfl
+  rw [hB]
+  exact (continuousOn_finsetSum _ fun j _ => (hfo _).smul continuousOn_const).neg
+
+/-- `T1`: `div (A V) = tr (h ↦ DA h V) + tr (A ∘ DV)`. -/
+theorem divergence_clm_apply {A : Space n → Space n →L[ℝ] Space n} {V : Space n → Space n}
+    {x : Space n} (hA : DifferentiableAt ℝ A x) (hV : DifferentiableAt ℝ V x) :
+    divergence (fun y => A y (V y)) x = traceFlip (fderiv ℝ A x) (V x) +
+      LinearMap.trace ℝ (Space n)
+        ((A x ∘L fderiv ℝ V x : Space n →L[ℝ] Space n) : Space n →ₗ[ℝ] Space n) := by
+  unfold divergence traceFlip
+  rw [fderiv_clm_apply hA hV]
+  simp only [trace_eq_sum_basis, ContinuousLinearMap.add_apply, inner_add_right,
+    Finset.sum_add_distrib]
+  ring
+
+theorem trace_comp_add (T A B : Space n →L[ℝ] Space n) :
+    LinearMap.trace ℝ (Space n) ((T ∘L (A + B) : Space n →L[ℝ] Space n) : Space n →ₗ[ℝ] Space n) =
+      LinearMap.trace ℝ (Space n) ((T ∘L A : Space n →L[ℝ] Space n) : Space n →ₗ[ℝ] Space n) +
+      LinearMap.trace ℝ (Space n) ((T ∘L B : Space n →L[ℝ] Space n) : Space n →ₗ[ℝ] Space n) := by
+  simp only [trace_eq_sum_basis, ContinuousLinearMap.comp_apply, ContinuousLinearMap.add_apply,
+    map_add, inner_add_right, Finset.sum_add_distrib]
+
+/-- `T3`: `tr (Ã DFᵀ M DF) = tr (a M)`. -/
+theorem trace_tildeA_comp (F : Space n → Space n) (a : Space n → Space n →L[ℝ] Space n)
+    {X : Space n} (hX : (fderiv ℝ F X).IsInvertible) (M : Space n →L[ℝ] Space n) :
+    LinearMap.trace ℝ (Space n) ((tildeA F a X ∘L (ContinuousLinearMap.adjoint (fderiv ℝ F X) ∘L
+      (M ∘L fderiv ℝ F X)) : Space n →L[ℝ] Space n) : Space n →ₗ[ℝ] Space n) =
+      LinearMap.trace ℝ (Space n) ((a (F X) ∘L M : Space n →L[ℝ] Space n) :
+        Space n →ₗ[ℝ] Space n) := by
+  have h1 : tildeA F a X ∘L (ContinuousLinearMap.adjoint (fderiv ℝ F X) ∘L
+      (M ∘L fderiv ℝ F X)) = ((fderiv ℝ F X).inverse ∘L (a (F X) ∘L M)) ∘L fderiv ℝ F X := by
+    ext1 v
+    simp only [tildeA, ContinuousLinearMap.comp_apply, adjoint_inverse_adjoint_apply hX]
+  rw [h1, ContinuousLinearMap.toLinearMap_comp, LinearMap.trace_comp_comm',
+    ← ContinuousLinearMap.toLinearMap_comp, ← ContinuousLinearMap.comp_assoc,
+    hX.self_comp_inverse, ContinuousLinearMap.id_comp]
+
+/-- `T2`: the derivative of `∇(u ∘ F)`. -/
+theorem fderiv_gradient_comp {u : Space n → ℝ} {F : Space n → Space n} {D U : Set (Space n)}
+    (hD : IsOpen D) (hu : ContDiffOn ℝ 2 u D) (hF : ContDiff ℝ ∞ F) (hU : IsOpen U)
+    (hFU : ∀ Y ∈ U, F Y ∈ D) {X : Space n} (hX : X ∈ U) :
+    fderiv ℝ (gradient (fun Z => u (F Z))) X =
+      ContinuousLinearMap.adjoint (fderiv ℝ F X) ∘L
+          (fderiv ℝ (gradient u) (F X) ∘L fderiv ℝ F X) +
+        (fderiv ℝ (fun Y => ContinuousLinearMap.adjoint (fderiv ℝ F Y)) X).flip
+          (gradient u (F X)) := by
+  have hF1 : ContDiff ℝ 1 F := hF.of_le (by exact_mod_cast le_top)
+  have hgu : ContDiffOn ℝ 1 (gradient u) D :=
+    (toDualSymmCLE (n := n)).contDiff.comp_contDiffOn (hu.fderiv_of_isOpen hD (by norm_num))
+  have hev : gradient (fun Z => u (F Z)) =ᶠ[𝓝 X]
+      fun Y => ContinuousLinearMap.adjoint (fderiv ℝ F Y) (gradient u (F Y)) := by
+    filter_upwards [hU.mem_nhds hX] with Y hY
+    exact gradient_comp ((hu.differentiableOn (by norm_num)).differentiableAt
+      (hD.mem_nhds (hFU Y hY))) (hF1.differentiable (by norm_num) Y)
+  rw [hev.fderiv_eq]
+  have hDF : ContDiff ℝ ∞ (fderiv ℝ F) := hF.fderiv_right (by simp)
+  have hadj : DifferentiableAt ℝ (fun Y => ContinuousLinearMap.adjoint (fderiv ℝ F Y)) X :=
+    ((adjointCLE (n := n)).contDiff.comp hDF).differentiable (by simp) X
+  have hgd : HasFDerivAt (gradient u) (fderiv ℝ (gradient u) (F X)) (F X) :=
+    ((hgu.differentiableOn (by norm_num)).differentiableAt (hD.mem_nhds (hFU X hX))).hasFDerivAt
+  have hgF : HasFDerivAt (fun Y => gradient u (F Y))
+      (fderiv ℝ (gradient u) (F X) ∘L fderiv ℝ F X) X :=
+    hgd.comp X (hF1.differentiable (by norm_num) X).hasFDerivAt
+  rw [fderiv_clm_apply hadj hgF.differentiableAt, hgF.fderiv]
+
+/-- The pointwise transformation rule for the principal part (steps `T1`–`T3`). -/
+theorem divergence_tildeA_eq (Γ : (Fin n → ℝ) → ℝ) (hΓ : Continuous Γ) (ρ : ℝ)
+    (a : Space n → Space n →L[ℝ] Space n) (ha : ContDiff ℝ ∞ a)
+    (b : Space n → Space n) (c : Space n → ℝ)
+    (u : Space n → ℝ) (hu : ContDiffOn ℝ 2 u (domain Γ ρ))
+    (hL : ∀ x ∈ domain Γ ρ,
+      divergence (fun y => a y (gradient u y)) x + ⟪b x, gradient u x⟫_ℝ + c x * u x = 0)
+    (F : Space n → Space n) (hF : ContDiff ℝ ∞ F) (R₀ : ℝ)
+    (hinv : ∀ X ∈ Metric.ball (0 : Space n) R₀, (fderiv ℝ F X).IsInvertible)
+    (hpos : ∀ X ∈ halfBall n R₀, F X ∈ domain Γ ρ) (X : Space n) (hX : X ∈ halfBall n R₀) :
+    divergence (fun Y => tildeA F a Y (gradient (fun Z => u (F Z)) Y)) X =
+      firstOrderFun F a b X (gradient (fun Z => u (F Z)) X) - c (F X) * u (F X) := by
+  have hdom : IsOpen (domain Γ ρ) := isOpen_domain hΓ ρ
+  have hXball : X ∈ Metric.ball (0 : Space n) R₀ := halfBall_subset_ball R₀ hX
+  have hXinv := hinv X hXball
+  have hFX : F X ∈ domain Γ ρ := hpos X hX
+  have hF1 : ContDiff ℝ 1 F := hF.of_le (by exact_mod_cast le_top)
+  have hÃd : DifferentiableAt ℝ (tildeA F a) X :=
+    ((contDiffOn_tildeA F hF a ha _ Metric.isOpen_ball hinv).differentiableOn
+      (by norm_num)).differentiableAt (Metric.isOpen_ball.mem_nhds hXball)
+  have hT2 := fderiv_gradient_comp hdom hu hF (isOpen_halfBall R₀) hpos hX
+  have hgu : ContDiffOn ℝ 1 (gradient u) (domain Γ ρ) :=
+    (toDualSymmCLE (n := n)).contDiff.comp_contDiffOn (hu.fderiv_of_isOpen hdom (by norm_num))
+  have hev : gradient (fun Z => u (F Z)) =ᶠ[𝓝 X]
+      fun Y => ContinuousLinearMap.adjoint (fderiv ℝ F Y) (gradient u (F Y)) := by
+    filter_upwards [(isOpen_halfBall R₀).mem_nhds hX] with Y hY
+    exact gradient_comp ((hu.differentiableOn (by norm_num)).differentiableAt
+      (hdom.mem_nhds (hpos Y hY))) (hF1.differentiable (by norm_num) Y)
+  have hgvd : DifferentiableAt ℝ (gradient (fun Z => u (F Z))) X := by
+    have hDF : ContDiff ℝ ∞ (fderiv ℝ F) := hF.fderiv_right (by simp)
+    have hadj : DifferentiableAt ℝ (fun Y => ContinuousLinearMap.adjoint (fderiv ℝ F Y)) X :=
+      ((adjointCLE (n := n)).contDiff.comp hDF).differentiable (by simp) X
+    have hgF : DifferentiableAt ℝ (fun Y => gradient u (F Y)) X :=
+      ((hgu.differentiableOn (by norm_num)).differentiableAt (hdom.mem_nhds hFX)).comp X
+        (hF1.differentiable (by norm_num) X)
+    exact (hadj.clm_apply hgF).congr_of_eventuallyEq hev
+  have hgvX : gradient (fun Z => u (F Z)) X =
+      ContinuousLinearMap.adjoint (fderiv ℝ F X) (gradient u (F X)) := hev.eq_of_nhds
+  have hQ : invAdj F X (gradient (fun Z => u (F Z)) X) = gradient u (F X) := by
+    rw [hgvX, invAdj, adjoint_inverse_adjoint_apply hXinv]
+  have hdiv_u := divergence_clm_apply (A := a) (V := gradient u) (x := F X)
+    (ha.differentiable (by simp) _)
+    ((hgu.differentiableOn (by norm_num)).differentiableAt (hdom.mem_nhds hFX))
+  have hLX := hL (F X) hFX
+  rw [hdiv_u] at hLX
+  rw [divergence_clm_apply hÃd hgvd, hT2, trace_comp_add, trace_tildeA_comp F a hXinv]
+  unfold firstOrderFun
+  rw [hQ]
+  linarith
 
 /-- **The transformed equation.** If `F` is smooth with invertible derivative on `B(0, R₀)` and
 maps the half-ball into the domain, then `u ∘ F` solves an equation in divergence form with
@@ -575,7 +1319,10 @@ theorem transformed_equation (Γ : (Fin n → ℝ) → ℝ) (hΓ : Continuous Γ
     (hpos : ∀ X ∈ halfBall n R₀, F X ∈ domain Γ ρ) :
     ∃ B : Space n → Space n, ContinuousOn B (Metric.ball 0 R₀) ∧
       ∀ X ∈ halfBall n R₀, ellOp (tildeA F a) B (fun Y => c (F Y)) (fun Y => u (F Y)) X = 0 := by
-  sorry
+  refine ⟨tildeB F a b, continuousOn_tildeB F hF a ha b hb R₀ hinv, fun X hX => ?_⟩
+  unfold ellOp
+  rw [divergence_tildeA_eq Γ hΓ ρ a ha b c u hu hL F hF R₀ hinv hpos X hX, inner_tildeB]
+  ring
 
 /-! ### Part 3: globalizing the coefficients -/
 
@@ -829,31 +1576,6 @@ theorem l2_comparison (F : Space n → Space n) (hF : ContDiff ℝ 1 F) (R₀ κ
         rw [smul_eq_mul]
         exact mul_le_mul_of_nonneg_right (hdet x (hsub hx)) (hg _)
     _ = κ₀ * ∫ x in halfBall n r, g (F x) := integral_const_mul κ₀ _
-
-/-! ### Auxiliary facts for the assembly -/
-
-/-- `ellOp` only depends on the germ of `A` and on the values of `B` and `C` at the point. -/
-theorem ellOp_congr {A A' : Space n → Space n →L[ℝ] Space n} {B B' : Space n → Space n}
-    {C C' : Space n → ℝ} {v : Space n → ℝ} {x : Space n} (hA : A =ᶠ[𝓝 x] A')
-    (hB : B x = B' x) (hC : C x = C' x) : ellOp A B C v x = ellOp A' B' C' v x := by
-  unfold ellOp
-  have h : (fun y => A y (gradient v y)) =ᶠ[𝓝 x] (fun y => A' y (gradient v y)) := by
-    filter_upwards [hA] with y hy
-    rw [hy]
-  unfold divergence
-  rw [h.fderiv_eq, hB, hC]
-
-/-- The chain rule for the gradient: `∇(u ∘ F) x = DF(x)ᵀ ∇u(F x)`. -/
-theorem gradient_comp {u : Space n → ℝ} {F : Space n → Space n} {x : Space n}
-    (hu : DifferentiableAt ℝ u (F x)) (hF : DifferentiableAt ℝ F x) :
-    gradient (fun y => u (F y)) x =
-      ContinuousLinearMap.adjoint (fderiv ℝ F x) (gradient u (F x)) := by
-  apply ext_inner_right ℝ
-  intro w
-  have : (fun y => u (F y)) = u ∘ F := rfl
-  rw [this, inner_gradient_left, fderiv_comp x hu hF, ContinuousLinearMap.adjoint_inner_left,
-    inner_gradient_left]
-  rfl
 
 end PkgC
 

@@ -27,6 +27,13 @@ that `closure Z ∩ U ⊆ Z` (`IsPreconnected.subset_of_closure_inter_subset`).
 
 The coefficient `A` is only symmetric on `U`; it is replaced by the globally symmetric
 `UCP.symmExt U A`, which agrees with `A` on `U`.
+
+The Carleman estimate is proved with the identities of package F2 (density `1`):
+`UCP.carlJ_lower_bound` is the pointwise positivity of the bulk term for `μ` large and a small
+ball (with `φ ∈ [1/2, 2]` there), `UCP.integral_identities` integrates the pointwise identities
+(`carleman_pointwise`, `carleman_gradient_pointwise`) with `integral_divergence_eq_zero`, and
+`UCP.carleman_conjugated_of_bounds` combines them (gradient term with `ϱ = 1` and Young's
+inequality); `UCP.carleman_local` returns from `u = e^{τφ} w` to `w`.
 -/
 
 open scoped ContDiff RealInnerProductSpace

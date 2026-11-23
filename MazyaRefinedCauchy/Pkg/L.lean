@@ -211,7 +211,7 @@ theorem sum_inner_sq_bE (y : Space n) : ∑ i, ⟪y, bE n i⟫_ℝ ^ 2 = ‖y‖
   OrthonormalBasis.sum_sq_inner_left (bE n) y
 
 theorem sum_norm_sq_bE : ∑ i : Fin (n + 1), ‖bE n i‖ ^ 2 = (n + 1 : ℝ) := by
-  simp [(bE n).orthonormal.norm_eq_one]
+  simp
 
 /-- The Laplacian as a sum of iterated directional derivatives.
 Adapted from TauCeti, `TauCeti/Analysis/InnerProductSpace/Laplacian/Basic.lean`. -/
@@ -337,7 +337,7 @@ theorem hasFDerivAt_invMapD_apply {y : Space n} (hy : y ≠ 0) (v : Space n) :
   refine ⟨_, key2, ?_⟩
   · simp only [ContinuousLinearMap.sub_apply, ContinuousLinearMap.add_apply,
       ContinuousLinearMap.smulRight_apply, ContinuousLinearMap.smul_apply,
-      ContinuousLinearMap.id_apply, sinvD_apply, innerSL_apply_apply, id, smul_eq_mul,
+      ContinuousLinearMap.id_apply, innerSL_apply_apply, id, smul_eq_mul,
       Pi.mul_apply]
     simp only [nsmul_eq_mul, Nat.cast_ofNat, real_inner_self_eq_norm_sq, real_inner_comm v y]
     module
@@ -746,89 +746,6 @@ theorem integrable_pow_mul_exp_neg_psiBar (ψ : ℝ → ℝ) (hψ_mono : Monoton
       _ = (S ^ k * Real.exp (-ψ 1) * (1 + S) ^ (n + 1)) * ((1 + r) ^ (n + 1))⁻¹ := by ring
       _ ≤ K * ((1 + r) ^ (n + 1))⁻¹ := mul_le_mul_of_nonneg_right hK2 (by positivity)
 
-/-- A bounded function on `(a, ∞)` with vanishing second derivative and limit `0` vanishes. -/
-theorem eq_zero_of_hasDerivAt_hasDerivAt_zero (m D : ℝ → ℝ) (a : ℝ)
-    (hm : ∀ t, a < t → HasDerivAt m (D t) t) (hD : ∀ t, a < t → HasDerivAt D 0 t)
-    (B : ℝ) (hb : ∀ t, a < t → |m t| ≤ B) (hlim : Tendsto m atTop (𝓝 0)) :
-    ∀ t, a < t → m t = 0 := by
-  -- `D` is constant on `(a, ∞)`
-  have hDc : ∀ t, a < t → D t = D (a + 1) := by
-    have key : ∀ s t, a < s → s < t → D t = D s := by
-      intro s t hs hst
-      obtain ⟨c, hc, hc'⟩ := exists_hasDerivAt_eq_slope (f := D) (f' := fun _ => (0 : ℝ)) hst
-        (fun x hx => (hD x (lt_of_lt_of_le hs hx.1)).continuousAt.continuousWithinAt)
-        (fun x hx => hD x (lt_trans hs hx.1))
-      have hne : t - s ≠ 0 := sub_ne_zero.2 hst.ne'
-      have := hc'.symm
-      rw [div_eq_zero_iff] at this
-      rcases this with h | h
-      · linarith [sub_eq_zero.1 h]
-      · exact absurd h hne
-    intro t ht
-    rcases lt_trichotomy t (a + 1) with h | h | h
-    · exact (key t (a + 1) ht h).symm
-    · rw [h]
-    · exact key (a + 1) t (by linarith) h
-  set c := D (a + 1) with hc
-  -- `m` is affine on `(a, ∞)`
-  have hmaff : ∀ t, a + 1 < t → m t = m (a + 1) + c * (t - (a + 1)) := by
-    intro t ht
-    obtain ⟨ξ, hξ, hξ'⟩ := exists_hasDerivAt_eq_slope (f := m) (f' := D) ht
-      (fun x hx => (hm x (by linarith [hx.1])).continuousAt.continuousWithinAt)
-      (fun x hx => hm x (by linarith [hx.1]))
-    rw [hDc ξ (by linarith [hξ.1])] at hξ'
-    have hne : t - (a + 1) ≠ 0 := sub_ne_zero.2 ht.ne'
-    field_simp at hξ'
-    linarith
-  -- boundedness forces `c = 0`
-  have hc0 : c = 0 := by
-    by_contra hne
-    have hcpos : 0 < |c| := abs_pos.2 hne
-    set t := a + 1 + (2 * B + 2 * |m (a + 1)| + 1) / |c| + 1 with ht
-    have hB0 : 0 ≤ B := le_trans (abs_nonneg _) (hb (a + 1) (by linarith))
-    have hfrac : 0 ≤ (2 * B + 2 * |m (a + 1)| + 1) / |c| := by positivity
-    have htgt : a + 1 < t := by linarith
-    have h1 := hb t (by linarith)
-    rw [hmaff t htgt] at h1
-    have h2 : |c * (t - (a + 1))| = |c| * (t - (a + 1)) := by
-      rw [abs_mul, abs_of_pos (by linarith : (0 : ℝ) < t - (a + 1))]
-    have h3 : |c| * (t - (a + 1)) ≥ 2 * B + 2 * |m (a + 1)| + 1 := by
-      have : t - (a + 1) = (2 * B + 2 * |m (a + 1)| + 1) / |c| + 1 := by rw [ht]; ring
-      rw [this, mul_add, mul_div_cancel₀ _ hcpos.ne', mul_one]
-      linarith
-    have h4 : |c * (t - (a + 1))| ≤ |m (a + 1) + c * (t - (a + 1))| + |m (a + 1)| := by
-      have e : c * (t - (a + 1)) = (m (a + 1) + c * (t - (a + 1))) + (-(m (a + 1))) := by ring
-      calc |c * (t - (a + 1))| = |(m (a + 1) + c * (t - (a + 1))) + (-(m (a + 1)))| := by
-            rw [← e]
-        _ ≤ |m (a + 1) + c * (t - (a + 1))| + |-(m (a + 1))| := abs_add_le _ _
-        _ = |m (a + 1) + c * (t - (a + 1))| + |m (a + 1)| := by rw [abs_neg]
-    have h5 := abs_nonneg (m (a + 1))
-    linarith
-  -- so `m` is constant, hence `0`
-  have hconst : ∀ t, a + 1 < t → m t = m (a + 1) := by
-    intro t ht
-    rw [hmaff t ht, hc0, zero_mul, add_zero]
-  have hlim' : Tendsto m atTop (𝓝 (m (a + 1))) := by
-    refine tendsto_const_nhds.congr' ?_
-    filter_upwards [eventually_gt_atTop (a + 1)] with t ht
-    exact (hconst t ht).symm
-  have hm1 : m (a + 1) = 0 := tendsto_nhds_unique hlim' hlim
-  intro t ht
-  rcases lt_or_ge (a + 1) t with h | h
-  · rw [hconst t h, hm1]
-  · -- `a < t ≤ a + 1`: `m` is affine through `t` as well
-    obtain ⟨ξ, hξ, hξ'⟩ := exists_hasDerivAt_eq_slope (f := m) (f' := D)
-      (show t < a + 2 by linarith)
-      (fun x hx => (hm x (by linarith [hx.1])).continuousAt.continuousWithinAt)
-      (fun x hx => hm x (by linarith [hx.1]))
-    rw [hDc ξ (by linarith [hξ.1]), hc0] at hξ'
-    have hne : a + 2 - t ≠ 0 := by linarith
-    have h2 : m (a + 2) = 0 := by rw [hconst (a + 2) (by linarith), hm1]
-    rw [eq_comm, div_eq_zero_iff] at hξ'
-    rcases hξ' with h' | h'
-    · linarith
-    · exact absurd h' hne
-
 /-- `Cu ≥ 0` (the half-space is nonempty). -/
 theorem cu_nonneg (lam : ℝ) (U : Space n → ℝ) (ψ : ℝ → ℝ) (Cu : ℝ)
     (hdecay : ∀ y, lam < vcoord y → |U y| ≤ Cu * Real.exp (-ψ ‖y‖)) : 0 ≤ Cu := by
@@ -939,25 +856,114 @@ theorem hmoment_tendsto_zero (lam : ℝ) (hlam : 1 ≤ lam) (U : Space n → ℝ
     have := hU0.const_mul (⟪y', e⟫_ℝ ^ k)
     simpa using this
 
-/-- **The moment ODE** (PDE input): the moments are `C²` on `(λ + 1/2, ∞)` with
-`m_k'' = -k(k-1)‖e‖² m_{k-2}`. Proof plan: `D t = ∫ ⟪y', e⟫ᵏ ∂ₜU(y', t) dy'`; interior derivative
-estimates for `U` on balls of radius `1/2` (from the mean value property, `F4.mean_value_phi`)
-give `|∂^α U(y', t)| ≤ C e^{-ψ̄(|y'| - 1)}` for `|α| ≤ 2`, `t > λ + 1/2`; this justifies
-differentiating twice under the integral sign; then `∂ₜ²U = -Δ'U` (harmonicity) and two
-integrations by parts in `y'` give `∫ ⟪y', e⟫ᵏ Δ'U = k(k-1)‖e‖² ∫ ⟪y', e⟫ᵏ⁻² U`. -/
-theorem hmoment_ode (lam : ℝ) (hlam : 1 ≤ lam) (U : Space n → ℝ)
+/-- A function with `m' = D`, `D' = 0` on `(a, ∞)` is affine there. -/
+theorem affine_of_hasDerivAt (m D : ℝ → ℝ) (a : ℝ)
+    (hm : ∀ t, a < t → HasDerivAt m (D t) t) (hD : ∀ t, a < t → HasDerivAt D 0 t) :
+    ∃ α β : ℝ, ∀ t, a < t → m t = α * t + β := by
+  have key : ∀ s t, a < s → s < t → D t = D s := by
+    intro s t hs hst
+    obtain ⟨c, hc, hc'⟩ := exists_hasDerivAt_eq_slope (f := D) (f' := fun _ => (0 : ℝ)) hst
+      (fun x hx => (hD x (lt_of_lt_of_le hs hx.1)).continuousAt.continuousWithinAt)
+      (fun x hx => hD x (lt_trans hs hx.1))
+    have hne : t - s ≠ 0 := sub_ne_zero.2 hst.ne'
+    have := hc'.symm
+    rw [div_eq_zero_iff] at this
+    rcases this with h | h
+    · linarith [sub_eq_zero.1 h]
+    · exact absurd h hne
+  have hDc : ∀ t, a < t → D t = D (a + 1) := by
+    intro t ht
+    rcases lt_trichotomy t (a + 1) with h | h | h
+    · exact (key t (a + 1) ht h).symm
+    · rw [h]
+    · exact key (a + 1) t (by linarith) h
+  have hslope : ∀ s t, a < s → s < t → m t - m s = D (a + 1) * (t - s) := by
+    intro s t hs hst
+    obtain ⟨ξ, hξ, hξ'⟩ := exists_hasDerivAt_eq_slope (f := m) (f' := D) hst
+      (fun x hx => (hm x (lt_of_lt_of_le hs hx.1)).continuousAt.continuousWithinAt)
+      (fun x hx => hm x (lt_trans hs hx.1))
+    rw [hDc ξ (lt_trans hs hξ.1)] at hξ'
+    have hne : t - s ≠ 0 := sub_ne_zero.2 hst.ne'
+    rw [hξ']
+    field_simp
+  refine ⟨D (a + 1), m (a + 1) - D (a + 1) * (a + 1), fun t ht => ?_⟩
+  rcases lt_trichotomy t (a + 1) with h | h | h
+  · have := hslope t (a + 1) ht h
+    linarith
+  · rw [h]; ring
+  · have := hslope (a + 1) t (by linarith) h
+    linarith
+
+/-- A bounded affine function on `(a, ∞)` tending to `0` vanishes. -/
+theorem eq_zero_of_affine_bounded (m : ℝ → ℝ) (a α β B : ℝ)
+    (haff : ∀ t, a < t → m t = α * t + β) (hb : ∀ t, a < t → |m t| ≤ B)
+    (hlim : Tendsto m atTop (𝓝 0)) : ∀ t, a < t → m t = 0 := by
+  have hα : α = 0 := by
+    by_contra hne
+    have hαpos : 0 < |α| := abs_pos.2 hne
+    have hB0 : 0 ≤ B := le_trans (abs_nonneg _) (hb (a + 1) (by linarith))
+    set t := |a| + 1 + (B + |β| + 1) / |α| with ht
+    have hfrac : 0 ≤ (B + |β| + 1) / |α| := by positivity
+    have hta : a < t := by
+      have := le_abs_self a
+      linarith
+    have h1 := hb t hta
+    rw [haff t hta] at h1
+    have h2 : B + |β| + 1 ≤ |α| * t := by
+      have : |α| * ((B + |β| + 1) / |α|) = B + |β| + 1 := mul_div_cancel₀ _ hαpos.ne'
+      have h3 : 0 ≤ |α| * (|a| + 1) := by positivity
+      rw [ht, mul_add, this]
+      linarith
+    have htpos : 0 < t := by
+      rw [ht]
+      have := abs_nonneg a
+      linarith [hfrac]
+    have h4 : |α| * t ≤ |α * t + β| + |β| := by
+      have e : α * t = (α * t + β) + (-β) := by ring
+      have := abs_add_le (α * t + β) (-β)
+      rw [← e, abs_neg, abs_mul, abs_of_pos htpos] at this
+      exact this
+    linarith
+  subst hα
+  have hconst : ∀ t, a < t → m t = β := fun t ht => by rw [haff t ht]; ring
+  have hlim' : Tendsto m atTop (𝓝 β) := by
+    refine tendsto_const_nhds.congr' ?_
+    filter_upwards [eventually_gt_atTop a] with t ht
+    exact (hconst t ht).symm
+  have hβ : β = 0 := tendsto_nhds_unique hlim' hlim
+  intro t ht
+  rw [hconst t ht, hβ]
+
+/-- **The moments are affine** (PDE input): if all lower moments `m_j` (`j < k`) vanish on
+`(λ + 1/2, ∞)`, then `m_k` is affine there.
+
+Classical route: `m_k'' = -k(k-1)‖e‖² m_{k-2}` (then apply `affine_of_hasDerivAt`). Put
+`D t = ∫ ⟪y', e⟫ᵏ ∂ₜU(y', t) dy'`; interior derivative estimates for `U` on balls of radius `1/2`
+(from the mean value property `F4.mean_value_phi`, after writing `U` as a convolution with the
+smooth radial bump `F4.phi`) give `|∂^α U(y', t)| ≤ C e^{-ψ̄(|y'|/2)}` for `|α| ≤ 2` and
+`t > λ + 1/2`; this justifies differentiating twice under the integral sign; then `∂ₜ²U = -Δ'U`
+and two integrations by parts in `y'` give `∫ ⟪y', e⟫ᵏ Δ'U = k(k-1)‖e‖² ∫ ⟪y', e⟫ᵏ⁻² U`.
+Weak route: test `ΔU = 0` against `⟪y', e⟫ᵏ χ(t) η(y'/R)`, let `R → ∞` using only the decay of
+`U`, and use that a continuous function with vanishing distributional second derivative on an
+interval is affine.
+Mean-value route: integrate `F4.mean_value_phi` against `⟪y', e⟫ᵏ dy'`; expanding
+`⟪w' - r z', e⟫ᵏ` binomially, the lower moments `m_j` (`j < k`, all `0` by strong induction; the
+odd ones also vanish by the symmetry of `φ`) drop out, so `m_k(t) ∫φ = ∫ K(s) m_k(t + r s) ds`
+with the even kernel `K(s) = ∫ φ(z', s) dz'`, for all small `r`; a continuous function with this
+one-dimensional mean value property is affine. -/
+theorem hmoment_affine (lam : ℝ) (hlam : 1 ≤ lam) (U : Space n → ℝ)
     (hU : HarmonicOnNhd U {y | lam < vcoord y}) (ψ : ℝ → ℝ) (Cu : ℝ)
     (hdecay : ∀ y, lam < vcoord y → |U y| ≤ Cu * Real.exp (-ψ ‖y‖))
     (hψ_mono : MonotoneOn ψ (Set.Ici 1))
     (hψ_log : Tendsto (fun s => ψ s / Real.log s) atTop atTop)
-    (e : EuclideanSpace ℝ (Fin n)) (k : ℕ) :
-    ∃ D : ℝ → ℝ, ∀ t, lam + 1 / 2 < t → HasDerivAt (hmoment U e k) (D t) t ∧
-      HasDerivAt D (-((k : ℝ) * ((k : ℝ) - 1) * ‖e‖ ^ 2) * hmoment U e (k - 2) t) t := by
+    (e : EuclideanSpace ℝ (Fin n)) (k : ℕ)
+    (hprev : ∀ j < k, ∀ t, lam + 1 / 2 < t → hmoment U e j t = 0) :
+    ∃ α β : ℝ, ∀ t, lam + 1 / 2 < t → hmoment U e k t = α * t + β := by
   sorry
 
 /-- **Vanishing of the horizontal moments.** For a harmonic function on `{t > λ}` decaying faster
 than every power, all moments `∫ ⟪y', e⟫ᵏ U(y', t) dy'` vanish for `t > λ + 1`.
-(The moments `m_k(t)` satisfy `m_k'' = -k(k-1) m_{k-2}`, are bounded, and tend to `0`.) -/
+(The moments `m_k(t)` satisfy `m_k'' = -k(k-1)‖e‖² m_{k-2}`, are bounded, and tend to `0`.) -/
 theorem flat_moments_eq_zero (lam : ℝ) (hlam : 1 ≤ lam) (U : Space n → ℝ)
     (hU : HarmonicOnNhd U {y | lam < vcoord y}) (ψ : ℝ → ℝ) (Cu : ℝ)
     (hdecay : ∀ y, lam < vcoord y → |U y| ≤ Cu * Real.exp (-ψ ‖y‖))
@@ -970,20 +976,10 @@ theorem flat_moments_eq_zero (lam : ℝ) (hlam : 1 ≤ lam) (U : Space n → ℝ
   intro k
   induction k using Nat.strong_induction_on with
   | _ k ih =>
-    obtain ⟨D, hD⟩ := hmoment_ode lam hlam U hU ψ Cu hdecay hψ_mono hψ_log e k
-    have hD0 : ∀ t, lam + 1 / 2 < t → HasDerivAt D 0 t := by
-      intro t ht
-      have h := (hD t ht).2
-      by_cases hk : 2 ≤ k
-      · rw [ih (k - 2) (by omega) t ht, mul_zero] at h
-        exact h
-      · have : (k : ℝ) * ((k : ℝ) - 1) * ‖e‖ ^ 2 = 0 := by
-          interval_cases k <;> norm_num
-        rw [this, neg_zero, zero_mul] at h
-        exact h
-    refine eq_zero_of_hasDerivAt_hasDerivAt_zero (hmoment U e k) D (lam + 1 / 2)
-      (fun t ht => (hD t ht).1) hD0 _ (fun t ht => hmoment_bound lam hlam U ψ Cu hdecay
-        hψ_mono hψ_log e k t (by linarith))
+    have hprev : ∀ j < k, ∀ t, lam + 1 / 2 < t → hmoment U e j t = 0 := fun j hj => ih j hj
+    obtain ⟨α, β, haff⟩ := hmoment_affine lam hlam U hU ψ Cu hdecay hψ_mono hψ_log e k hprev
+    exact eq_zero_of_affine_bounded (hmoment U e k) (lam + 1 / 2) α β _ haff
+      (fun t ht => hmoment_bound lam hlam U ψ Cu hdecay hψ_mono hψ_log e k t (by linarith))
       (hmoment_tendsto_zero lam hlam U hU ψ Cu hdecay hψ_mono hψ_log e k)
 
 /-- The line pairing `L y s = ⟪e, y⟫ s` (from the Fourier scouting checks). -/
@@ -1122,22 +1118,433 @@ theorem pow_mul_exp_neg_psiBar_le (ψ : ℝ → ℝ) (hψ_mono : MonotoneOn ψ (
       _ ≤ Real.exp (k * carlemanL ψ k) :=
           Real.exp_le_exp.2 (mul_le_mul_of_nonneg_left h1 hkpos.le)
 
-/-- **Carleman's divergence, one-dimensional core** (pure real analysis): `∑ e^{-L_k} = ∞`.
+/-- **Block bound** (convexity): if the chord slope of `σ ↦ ψ(e^σ)` on `[j, j+1]` is at least
+`2k`, then `L_k ≤ j + 1 + |ψ 1|`. -/
+theorem carlemanL_le_of_slope (ψ : ℝ → ℝ) (hψ_mono : MonotoneOn ψ (Set.Ici 1))
+    (hψ_log : Tendsto (fun s => ψ s / Real.log s) atTop atTop) (σ₀ : ℝ)
+    (hconv : ConvexOn ℝ (Set.Ici σ₀) (fun σ => ψ (Real.exp σ))) (j : ℕ) (hj : σ₀ ≤ j)
+    (k : ℕ) (hk : 1 ≤ k)
+    (hslope : 2 * (k : ℝ) ≤ ψ (Real.exp ((j : ℝ) + 1)) - ψ (Real.exp j)) :
+    carlemanL ψ k ≤ (j : ℝ) + 1 + |ψ 1| := by
+  have hkpos : (0 : ℝ) < k := by exact_mod_cast hk
+  have hk1 : (1 : ℝ) ≤ k := by exact_mod_cast hk
+  have : Nonempty (Set.Ici (0 : ℝ)) := ⟨⟨0, le_rfl⟩⟩
+  refine ciSup_le fun ⟨σ, hσ⟩ => ?_
+  simp only [Set.mem_Ici] at hσ
+  show σ - psiBar ψ (Real.exp σ) / (2 * k) ≤ (j : ℝ) + 1 + |ψ 1|
+  have hpsi : ∀ τ : ℝ, 0 ≤ τ → psiBar ψ (Real.exp τ) = ψ (Real.exp τ) := fun τ hτ => by
+    simp [psiBar, max_eq_left (Real.one_le_exp hτ)]
+  have hneg : ∀ τ : ℝ, 0 ≤ τ → -(ψ (Real.exp τ) / (2 * k)) ≤ |ψ 1| := by
+    intro τ hτ
+    have h1 : ψ 1 ≤ ψ (Real.exp τ) := hψ_mono (Set.mem_Ici.2 le_rfl)
+      (Set.mem_Ici.2 (Real.one_le_exp hτ)) (Real.one_le_exp hτ)
+    have h4 : -(ψ (Real.exp τ) / (2 * k)) ≤ -(ψ 1) / (2 * k) := by
+      rw [neg_div]
+      exact neg_le_neg (div_le_div_of_nonneg_right h1 (by positivity))
+    have h5 : -(ψ 1) / (2 * k) ≤ |ψ 1| := by
+      rw [div_le_iff₀ (by positivity)]
+      have : (1 : ℝ) ≤ 2 * k := by linarith
+      nlinarith [abs_nonneg (ψ 1), neg_le_abs (ψ 1)]
+    linarith
+  rw [hpsi σ hσ]
+  rcases le_or_gt σ ((j : ℝ) + 1) with h | h
+  · have := hneg σ hσ
+    linarith
+  · -- convexity on `j < j + 1 < σ`
+    have hj0 : (0 : ℝ) ≤ j := Nat.cast_nonneg j
+    have hsl := hconv.slope_mono_adjacent (x := (j : ℝ)) (y := (j : ℝ) + 1) (z := σ)
+      (Set.mem_Ici.2 hj) (Set.mem_Ici.2 (by linarith)) (by linarith) h
+    simp only [add_sub_cancel_left, div_one] at hsl
+    have hpos : 0 < σ - ((j : ℝ) + 1) := by linarith
+    rw [le_div_iff₀ hpos] at hsl
+    have h2 : ψ (Real.exp ((j : ℝ) + 1)) + 2 * k * (σ - ((j : ℝ) + 1)) ≤ ψ (Real.exp σ) := by
+      nlinarith
+    have h3 : σ - ψ (Real.exp σ) / (2 * k) ≤
+        (j : ℝ) + 1 - ψ (Real.exp ((j : ℝ) + 1)) / (2 * k) := by
+      have : ψ (Real.exp σ) / (2 * k) ≥
+          ψ (Real.exp ((j : ℝ) + 1)) / (2 * k) + (σ - ((j : ℝ) + 1)) := by
+        rw [ge_iff_le, ← sub_nonneg]
+        have e : ψ (Real.exp σ) / (2 * k) -
+            (ψ (Real.exp ((j : ℝ) + 1)) / (2 * k) + (σ - ((j : ℝ) + 1))) =
+            (ψ (Real.exp σ) - (ψ (Real.exp ((j : ℝ) + 1)) + 2 * k * (σ - ((j : ℝ) + 1)))) /
+              (2 * k) := by
+          field_simp
+        rw [e]
+        exact div_nonneg (by linarith) (by positivity)
+      linarith
+    have := hneg ((j : ℝ) + 1) (by linarith)
+    linarith
 
-Proof plan (discrete, no derivatives). Put `ω(σ) = ψ(e^σ)/2`, convex for `σ ≥ σ₁ = max σ₀ 0`,
-`ω ≥ ψ(1)/2`, and `s_j = ω(j+1) - ω(j)` (nondecreasing for `j ≥ σ₁`, `→ ∞`). The chord
-inequalities (`ConvexOn.slope_mono_adjacent`) give `ω(σ) ≥ ω(j+1) + s_j (σ - j - 1)` for
-`σ ≥ j + 1` and `ω(σ) ≥ ω(j-1) - s_{j-1} (j - 1 - σ)` for `σ₁ ≤ σ ≤ j - 1`; hence
-`L_k ≤ j + 1 + c` for every integer `k ∈ (s_{j-1}, s_j]`. Grouping the `k` in blocks,
-`∑ e^{-L_k} ≥ c' ∑_j (⌊s_j⌋ - ⌊s_{j-1}⌋) e^{-j}`, and two Abel summations bound this below by
-`c'' ∑_j ω(j) e^{-j} - C`, which is infinite because `∫_1^∞ ψ(s)/s² ds = ∑_j ∫_{e^j}^{e^{j+1}}`
-and `ψ` is monotone. -/
+/-- Telescoping: `∑_{j < m, a ≤ j} (x^j - x^{j+1}) ≤ x^a` for `0 ≤ x`. -/
+theorem sum_tele_le (x : ℝ) (hx : 0 ≤ x) (a m : ℕ) :
+    ∑ j ∈ Finset.range m, (if a ≤ j then x ^ j - x ^ (j + 1) else 0) ≤ x ^ a := by
+  have key : ∀ m : ℕ, ∑ j ∈ Finset.range m, (if a ≤ j then x ^ j - x ^ (j + 1) else 0) +
+      x ^ (max a m) = x ^ a := by
+    intro m
+    induction m with
+    | zero => simp
+    | succ m ih =>
+      rw [Finset.sum_range_succ]
+      by_cases ham : a ≤ m
+      · rw [if_pos ham]
+        have h1 : max a (m + 1) = m + 1 := max_eq_right (by omega)
+        have h2 : max a m = m := max_eq_right ham
+        rw [h2] at ih
+        rw [h1]
+        linarith
+      · rw [if_neg ham]
+        have h1 : max a (m + 1) = a := max_eq_left (by omega)
+        have h2 : max a m = a := max_eq_left (by omega)
+        rw [h2] at ih
+        rw [h1]
+        linarith
+  have := key m
+  have hpos : 0 ≤ x ^ (max a m) := pow_nonneg hx _
+  linarith
+
+/-- Abel summation: `∑_{j ≤ N} (Ψ j - Ψ 0) x^j + (Ψ N - Ψ 0) x^{N+1}/(1-x) =
+∑_{i < N} (Ψ (i+1) - Ψ i) x^{i+1}/(1-x)`. -/
+theorem abel_identity (Ψ : ℕ → ℝ) (x : ℝ) (hx : x ≠ 1) (N : ℕ) :
+    ∑ j ∈ Finset.range (N + 1), (Ψ j - Ψ 0) * x ^ j + (Ψ N - Ψ 0) * x ^ (N + 1) / (1 - x) =
+      ∑ i ∈ Finset.range N, (Ψ (i + 1) - Ψ i) * x ^ (i + 1) / (1 - x) := by
+  have h1x : 1 - x ≠ 0 := sub_ne_zero.2 (Ne.symm hx)
+  induction N with
+  | zero => simp
+  | succ N ih =>
+    rw [Finset.sum_range_succ, Finset.sum_range_succ (fun i => (Ψ (i + 1) - Ψ i) * x ^ (i + 1) / (1 - x)),
+      ← ih]
+    field_simp
+    ring
+
+/-- **Abel summation core** (pure sequences): if the increments `s_j = Ψ(j+1) - Ψ(j) ≥ 0` are
+eventually nondecreasing and `Λ_k ≤ j + c` whenever `2k ≤ s_j`, then `∑ e^{-Λ_k} < ∞` forces
+`∑ Ψ(j) e^{-j} < ∞`.
+
+Proof plan: for `j ≥ J`, every integer `k ∈ (s_{j-1}/2, s_j/2]` has `e^{-Λ_k} ≥ e^{-c} e^{-j}`, and
+these blocks are disjoint; so the partial sums of `∑_j (⌊s_j/2⌋ - ⌊s_{j-1}/2⌋) e^{-j}` are bounded.
+Abel summation turns this into a bound on `∑_j ⌊s_j/2⌋ e^{-j}`, hence on `∑_j s_j e^{-j}`, and a
+second Abel summation (with `Ψ` bounded below) bounds `∑_j Ψ(j) e^{-j}`. If `s_j` stays bounded,
+`Ψ(j) = O(j)` and the conclusion is immediate. -/
+theorem summable_of_block_bound (Ψ : ℕ → ℝ) (J : ℕ) (hmono : ∀ j, Ψ j ≤ Ψ (j + 1))
+    (hconv : ∀ j, J ≤ j → Ψ (j + 1) - Ψ j ≤ Ψ (j + 2) - Ψ (j + 1))
+    (Λ : ℕ → ℝ) (c : ℝ)
+    (hΛ : ∀ j, J ≤ j → ∀ k : ℕ, 1 ≤ k → 2 * (k : ℝ) ≤ Ψ (j + 1) - Ψ j → Λ k ≤ j + c)
+    (hsum : Summable (fun k => Real.exp (-Λ k))) :
+    Summable (fun j : ℕ => Ψ j * Real.exp (-(j : ℝ))) := by
+  classical
+  set x : ℝ := Real.exp (-1) with hxdef
+  have hx0 : 0 < x := Real.exp_pos _
+  have hx1 : x < 1 := Real.exp_lt_one_iff.mpr (by norm_num)
+  have hq : 0 < 1 - x := by linarith
+  have hexp : ∀ j : ℕ, Real.exp (-(j : ℝ)) = x ^ j := by
+    intro j
+    rw [hxdef, ← Real.exp_nat_mul]
+    ring_nf
+  simp_rw [hexp]
+  set s : ℕ → ℝ := fun j => Ψ (j + 1) - Ψ j with hs
+  have hs0 : ∀ j, 0 ≤ s j := fun j => sub_nonneg.2 (hmono j)
+  set T := ∑' k, Real.exp (-Λ k) with hT
+  set w : ℕ → ℝ := fun j => x ^ j - x ^ (j + 1) with hw
+  have hw_eq : ∀ j : ℕ, w j = (1 - x) * x ^ j := fun j => by simp only [hw]; ring
+  have hw0 : ∀ j, 0 ≤ w j := fun j => by rw [hw_eq]; positivity
+  -- the per-`k` bound
+  have hk' : ∀ N k : ℕ, 1 ≤ k → ∑ j ∈ Finset.range N,
+      (if J ≤ j ∧ 2 * (k : ℝ) ≤ s j then w j else 0) ≤ Real.exp c * Real.exp (-Λ k) := by
+    intro N k hk1
+    by_cases hex : ∃ j, J ≤ j ∧ 2 * (k : ℝ) ≤ s j
+    · have hj₀ := Nat.find_spec hex
+      have hΛk : Λ k ≤ (Nat.find hex : ℝ) + c := hΛ _ hj₀.1 k hk1 hj₀.2
+      calc ∑ j ∈ Finset.range N, (if J ≤ j ∧ 2 * (k : ℝ) ≤ s j then w j else 0)
+          ≤ ∑ j ∈ Finset.range N, (if Nat.find hex ≤ j then x ^ j - x ^ (j + 1) else 0) := by
+            refine Finset.sum_le_sum fun j _ => ?_
+            by_cases hc : J ≤ j ∧ 2 * (k : ℝ) ≤ s j
+            · rw [if_pos hc, if_pos (Nat.find_min' hex hc)]
+            · rw [if_neg hc]
+              split_ifs
+              · exact hw0 j
+              · exact le_rfl
+        _ ≤ x ^ (Nat.find hex) := sum_tele_le x hx0.le _ N
+        _ = Real.exp (-((Nat.find hex : ℕ) : ℝ)) := (hexp _).symm
+        _ ≤ Real.exp c * Real.exp (-Λ k) := by
+            rw [← Real.exp_add]
+            exact Real.exp_le_exp.2 (by linarith)
+    · push Not at hex
+      rw [Finset.sum_eq_zero fun j _ => if_neg (fun h => absurd h.2 (not_le.2 (hex j h.1)))]
+      positivity
+  -- counting
+  have hcount : ∀ N, ∑ j ∈ Finset.range N, (if J ≤ j then w j * (s j / 2 - 1) else 0) ≤
+      Real.exp c * T := by
+    intro N
+    set M : ℕ := ∑ j ∈ Finset.range N, ⌊s j⌋₊ with hM
+    calc ∑ j ∈ Finset.range N, (if J ≤ j then w j * (s j / 2 - 1) else 0)
+        ≤ ∑ j ∈ Finset.range N, ∑ k ∈ Finset.Icc 1 M,
+            (if J ≤ j ∧ 2 * (k : ℝ) ≤ s j then w j else 0) := by
+          refine Finset.sum_le_sum fun j hj => ?_
+          by_cases hJ : J ≤ j
+          · rw [if_pos hJ]
+            simp only [hJ, true_and]
+            rw [Finset.sum_ite, Finset.sum_const_zero, add_zero, Finset.sum_const, nsmul_eq_mul]
+            have hsub : Finset.Icc 1 ⌊s j / 2⌋₊ ⊆
+                (Finset.Icc 1 M).filter (fun k : ℕ => 2 * (k : ℝ) ≤ s j) := by
+              intro k hk
+              rw [Finset.mem_Icc] at hk
+              rw [Finset.mem_filter, Finset.mem_Icc]
+              have hk2 : (k : ℝ) ≤ s j / 2 :=
+                (Nat.cast_le.2 hk.2).trans (Nat.floor_le (by linarith [hs0 j]))
+              refine ⟨⟨hk.1, hk.2.trans ?_⟩, by linarith⟩
+              calc ⌊s j / 2⌋₊ ≤ ⌊s j⌋₊ := Nat.floor_le_floor (by linarith [hs0 j])
+                _ ≤ M := Finset.single_le_sum (f := fun i => ⌊s i⌋₊)
+                    (fun i _ => Nat.zero_le _) hj
+            have hcard := Finset.card_le_card hsub
+            rw [Nat.card_Icc, add_tsub_cancel_right] at hcard
+            have hfl : s j / 2 - 1 ≤ (⌊s j / 2⌋₊ : ℝ) := by
+              have := Nat.lt_floor_add_one (s j / 2)
+              linarith
+            have hcard' : (⌊s j / 2⌋₊ : ℝ) ≤
+                (((Finset.Icc 1 M).filter (fun k : ℕ => 2 * (k : ℝ) ≤ s j)).card : ℝ) := by
+              exact_mod_cast hcard
+            rw [mul_comm (w j)]
+            exact mul_le_mul_of_nonneg_right (hfl.trans hcard') (hw0 j)
+          · rw [if_neg hJ]
+            refine Finset.sum_nonneg fun k _ => ?_
+            split_ifs
+            · exact hw0 j
+            · exact le_rfl
+      _ = ∑ k ∈ Finset.Icc 1 M, ∑ j ∈ Finset.range N,
+            (if J ≤ j ∧ 2 * (k : ℝ) ≤ s j then w j else 0) := Finset.sum_comm
+      _ ≤ ∑ k ∈ Finset.Icc 1 M, Real.exp c * Real.exp (-Λ k) :=
+          Finset.sum_le_sum fun k hk => hk' N k (Finset.mem_Icc.1 hk).1
+      _ = Real.exp c * ∑ k ∈ Finset.Icc 1 M, Real.exp (-Λ k) := by rw [Finset.mul_sum]
+      _ ≤ Real.exp c * T := mul_le_mul_of_nonneg_left
+          (hsum.sum_le_tsum _ (fun k _ => (Real.exp_pos _).le)) (Real.exp_pos _).le
+  -- summability of `s_j x^j`
+  have hgeo : Summable (fun j : ℕ => x ^ j) := summable_geometric_of_lt_one hx0.le hx1
+  set A := ∑ j ∈ Finset.range J, s j * x ^ j with hA
+  have hsumS : Summable (fun j => s j * x ^ j) := by
+    refine summable_of_sum_range_le (c := A + 2 / (1 - x) * (Real.exp c * T) +
+      2 * ∑' j, x ^ j) (fun j => mul_nonneg (hs0 j) (pow_nonneg hx0.le _)) fun N => ?_
+    have hterm : ∀ j, s j * x ^ j ≤ (if j < J then s j * x ^ j else 0) +
+        2 / (1 - x) * (if J ≤ j then w j * (s j / 2 - 1) else 0) + 2 * x ^ j := by
+      intro j
+      by_cases hj : j < J
+      · rw [if_pos hj, if_neg (by omega)]
+        have := pow_nonneg hx0.le j
+        linarith
+      · rw [if_neg hj, if_pos (by omega), hw_eq]
+        have e : 2 / (1 - x) * ((1 - x) * x ^ j * (s j / 2 - 1)) = x ^ j * (s j - 2) := by
+          field_simp
+        rw [e]
+        linarith
+    calc ∑ i ∈ Finset.range N, s i * x ^ i
+        ≤ ∑ i ∈ Finset.range N, ((if i < J then s i * x ^ i else 0) +
+            2 / (1 - x) * (if J ≤ i then w i * (s i / 2 - 1) else 0) + 2 * x ^ i) :=
+          Finset.sum_le_sum fun i _ => hterm i
+      _ = ∑ i ∈ Finset.range N, (if i < J then s i * x ^ i else 0) +
+            2 / (1 - x) * ∑ i ∈ Finset.range N, (if J ≤ i then w i * (s i / 2 - 1) else 0) +
+            2 * ∑ i ∈ Finset.range N, x ^ i := by
+          rw [Finset.sum_add_distrib, Finset.sum_add_distrib, Finset.mul_sum, Finset.mul_sum]
+      _ ≤ A + 2 / (1 - x) * (Real.exp c * T) + 2 * ∑' j, x ^ j := by
+          have h1 : ∑ i ∈ Finset.range N, (if i < J then s i * x ^ i else 0) ≤ A := by
+            rw [← Finset.sum_filter, hA]
+            refine Finset.sum_le_sum_of_subset_of_nonneg ?_ fun i _ _ =>
+              mul_nonneg (hs0 i) (pow_nonneg hx0.le _)
+            intro i hi
+            rw [Finset.mem_filter] at hi
+            exact Finset.mem_range.2 hi.2
+          have h2 := hcount N
+          have h3 : ∑ i ∈ Finset.range N, x ^ i ≤ ∑' j, x ^ j :=
+            hgeo.sum_le_tsum _ (fun i _ => pow_nonneg hx0.le _)
+          have h4 : 0 ≤ 2 / (1 - x) := by positivity
+          nlinarith
+  -- Abel summation: from `∑ s_j x^j` to `∑ Ψ j x^j`
+  have hD : Summable (fun j => (Ψ j - Ψ 0) * x ^ j) := by
+    refine summable_of_sum_range_le (c := (∑' i, s i * x ^ i) * x / (1 - x))
+      (fun j => mul_nonneg (by
+        induction j with
+        | zero => simp
+        | succ j ih => linarith [hmono j]) (pow_nonneg hx0.le _)) fun N => ?_
+    have hD0 : ∀ j, 0 ≤ Ψ j - Ψ 0 := by
+      intro j
+      induction j with
+      | zero => simp
+      | succ j ih => linarith [hmono j]
+    rcases N with _ | N
+    · simp only [Finset.range_zero, Finset.sum_empty]
+      have : 0 ≤ ∑' i, s i * x ^ i :=
+        tsum_nonneg (fun i => mul_nonneg (hs0 i) (pow_nonneg hx0.le (n := i)))
+      positivity
+    · have hab := abel_identity Ψ x hx1.ne N
+      have hrem : 0 ≤ (Ψ N - Ψ 0) * x ^ (N + 1) / (1 - x) := by
+        have := hD0 N
+        positivity
+      have hR : ∑ i ∈ Finset.range N, (Ψ (i + 1) - Ψ i) * x ^ (i + 1) / (1 - x) ≤
+          (∑' i, s i * x ^ i) * x / (1 - x) := by
+        have e : ∑ i ∈ Finset.range N, (Ψ (i + 1) - Ψ i) * x ^ (i + 1) / (1 - x) =
+            (∑ i ∈ Finset.range N, s i * x ^ i) * x / (1 - x) := by
+          rw [Finset.sum_mul, Finset.sum_div]
+          refine Finset.sum_congr rfl fun i _ => ?_
+          simp only [hs]
+          ring
+        rw [e]
+        have := hsumS.sum_le_tsum (Finset.range N)
+          (fun i _ => mul_nonneg (hs0 i) (pow_nonneg hx0.le _))
+        have h5 : 0 ≤ x / (1 - x) := by positivity
+        calc (∑ i ∈ Finset.range N, s i * x ^ i) * x / (1 - x)
+            = (∑ i ∈ Finset.range N, s i * x ^ i) * (x / (1 - x)) := by ring
+          _ ≤ (∑' i, s i * x ^ i) * (x / (1 - x)) := mul_le_mul_of_nonneg_right this h5
+          _ = (∑' i, s i * x ^ i) * x / (1 - x) := by ring
+      linarith
+  have hfin := hD.add (hgeo.mul_left (Ψ 0))
+  refine hfin.congr fun j => ?_
+  ring
+
+/-- **From dyadic sums to the integral**: `∑ ψ(e^j) e^{-j} < ∞` gives `∫_1^∞ ψ(s)/s² ds < ∞`. -/
+theorem integrableOn_of_summable_exp (ψ : ℝ → ℝ) (hψ_mono : MonotoneOn ψ (Set.Ici 1))
+    (h : Summable (fun j : ℕ => ψ (Real.exp j) * Real.exp (-(j : ℝ)))) :
+    IntegrableOn (fun s => ψ s / s ^ 2) (Set.Ici 1) := by
+  set S : ℕ → Set ℝ := fun j => Set.Icc (Real.exp j) (Real.exp ((j : ℝ) + 1)) with hS
+  have hU : (⋃ j, S j) = Set.Ici 1 := by
+    ext x
+    simp only [Set.mem_iUnion, hS, Set.mem_Icc, Set.mem_Ici]
+    constructor
+    · rintro ⟨j, hj, -⟩
+      exact (Real.one_le_exp (Nat.cast_nonneg j)).trans hj
+    · intro hx
+      have hlog : 0 ≤ Real.log x := Real.log_nonneg hx
+      refine ⟨⌊Real.log x⌋₊, ?_, ?_⟩
+      · calc Real.exp (⌊Real.log x⌋₊ : ℝ) ≤ Real.exp (Real.log x) :=
+              Real.exp_le_exp.2 (Nat.floor_le hlog)
+          _ = x := Real.exp_log (by linarith)
+      · calc x = Real.exp (Real.log x) := (Real.exp_log (by linarith)).symm
+          _ ≤ Real.exp ((⌊Real.log x⌋₊ : ℝ) + 1) :=
+              Real.exp_le_exp.2 (Nat.lt_floor_add_one _).le
+  rw [← hU]
+  -- a measurable representative on `[1, ∞)`
+  have hg : Measurable (fun s : ℝ => psiBar ψ s / s ^ 2) :=
+    (psiBar_mono ψ hψ_mono).measurable.div (continuous_pow 2).measurable
+  have hfg : ∀ j, ∀ x ∈ S j, ψ x / x ^ 2 = psiBar ψ x / x ^ 2 := by
+    intro j x hx
+    have hx1 : 1 ≤ x := (Real.one_le_exp (Nat.cast_nonneg j)).trans hx.1
+    simp [psiBar, max_eq_left hx1]
+  set bnd : ℕ → ℝ := fun j =>
+    (|ψ (Real.exp ((j : ℝ) + 1))| + |ψ 1|) * Real.exp (-(2 * (j : ℝ))) with hbnd
+  have hbound : ∀ j, ∀ x ∈ S j, ‖ψ x / x ^ 2‖ ≤ bnd j := by
+    intro j x hx
+    have hx1 : 1 ≤ x := (Real.one_le_exp (Nat.cast_nonneg j)).trans hx.1
+    have hxpos : 0 < x := by linarith
+    have hψx : |ψ x| ≤ |ψ (Real.exp ((j : ℝ) + 1))| + |ψ 1| := by
+      have h1 : ψ 1 ≤ ψ x := hψ_mono (Set.mem_Ici.2 le_rfl) (Set.mem_Ici.2 hx1) hx1
+      have h2 : ψ x ≤ ψ (Real.exp ((j : ℝ) + 1)) :=
+        hψ_mono (Set.mem_Ici.2 hx1) (Set.mem_Ici.2 (hx1.trans hx.2)) hx.2
+      rw [abs_le]
+      constructor
+      · linarith [neg_abs_le (ψ 1), abs_nonneg (ψ (Real.exp ((j : ℝ) + 1)))]
+      · linarith [le_abs_self (ψ (Real.exp ((j : ℝ) + 1))), abs_nonneg (ψ 1)]
+    have hx2 : Real.exp (2 * (j : ℝ)) ≤ x ^ 2 := by
+      rw [show 2 * (j : ℝ) = (j : ℝ) + j by ring, Real.exp_add, sq]
+      exact mul_le_mul hx.1 hx.1 (Real.exp_pos _).le hxpos.le
+    rw [Real.norm_eq_abs, abs_div, abs_of_pos (by positivity : (0 : ℝ) < x ^ 2), hbnd]
+    simp only
+    rw [Real.exp_neg, ← div_eq_mul_inv]
+    exact div_le_div₀ (by positivity) hψx (Real.exp_pos _) hx2
+  have hint : ∀ j, IntegrableOn (fun s => ψ s / s ^ 2) (S j) := by
+    intro j
+    refine IntegrableOn.of_bound (C := bnd j) (by simp [hS, Real.volume_Icc]) ?_ ?_
+    · refine hg.aestronglyMeasurable.congr ?_
+      refine (ae_restrict_iff' measurableSet_Icc).2 (Filter.Eventually.of_forall fun x hx => ?_)
+      exact (hfg j x hx).symm
+    · exact (ae_restrict_iff' measurableSet_Icc).2 (Filter.Eventually.of_forall (hbound j))
+  refine integrableOn_iUnion_of_summable_integral_norm hint ?_
+  -- summability of the pieces
+  have hsum1 : Summable (fun j : ℕ => |ψ (Real.exp ((j : ℝ) + 1))| * Real.exp (-(j : ℝ))) := by
+    have h1 := (summable_nat_add_iff 1).2 h.abs
+    have h2 := h1.mul_left (Real.exp 1)
+    refine h2.congr fun j => ?_
+    simp only [abs_mul, abs_of_pos (Real.exp_pos _)]
+    push_cast
+    have e1 : Real.exp (-((j : ℝ) + 1)) = Real.exp (-(j : ℝ)) * Real.exp (-1) := by
+      rw [← Real.exp_add]; ring_nf
+    rw [e1]
+    have : Real.exp 1 * Real.exp (-1) = 1 := by rw [← Real.exp_add]; simp
+    calc Real.exp 1 * (|ψ (Real.exp ((j : ℝ) + 1))| * (Real.exp (-(j : ℝ)) * Real.exp (-1)))
+        = |ψ (Real.exp ((j : ℝ) + 1))| * Real.exp (-(j : ℝ)) * (Real.exp 1 * Real.exp (-1)) := by
+          ring
+      _ = |ψ (Real.exp ((j : ℝ) + 1))| * Real.exp (-(j : ℝ)) := by rw [this, mul_one]
+  have hsum2 : Summable (fun j : ℕ => Real.exp 1 *
+      ((|ψ (Real.exp ((j : ℝ) + 1))| + |ψ 1|) * Real.exp (-(j : ℝ)))) := by
+    refine Summable.mul_left _ ?_
+    simp_rw [add_mul]
+    exact hsum1.add (Real.summable_exp_neg_nat.mul_left _)
+  refine Summable.of_nonneg_of_le (fun j => integral_nonneg fun x => norm_nonneg _) (fun j => ?_)
+    hsum2
+  have hle : ‖∫ x in S j, ‖ψ x / x ^ 2‖‖ ≤ bnd j * volume.real (S j) :=
+    norm_setIntegral_le_of_norm_le_const (by simp [hS, Real.volume_Icc])
+      (fun x hx => by rw [norm_norm]; exact hbound j x hx)
+  rw [Real.norm_of_nonneg (integral_nonneg fun x => norm_nonneg _)] at hle
+  refine hle.trans ?_
+  have hej : Real.exp (j : ℝ) ≤ Real.exp ((j : ℝ) + 1) := Real.exp_le_exp.2 (by linarith)
+  rw [hS]
+  simp only
+  rw [Real.volume_real_Icc_of_le hej, hbnd]
+  simp only
+  have hvol : Real.exp ((j : ℝ) + 1) - Real.exp j ≤ Real.exp 1 * Real.exp (j : ℝ) := by
+    rw [Real.exp_add]
+    nlinarith [Real.exp_pos (j : ℝ), Real.exp_pos 1]
+  have hA : 0 ≤ |ψ (Real.exp ((j : ℝ) + 1))| + |ψ 1| := by positivity
+  calc (|ψ (Real.exp ((j : ℝ) + 1))| + |ψ 1|) * Real.exp (-(2 * (j : ℝ))) *
+        (Real.exp ((j : ℝ) + 1) - Real.exp j)
+      ≤ (|ψ (Real.exp ((j : ℝ) + 1))| + |ψ 1|) * Real.exp (-(2 * (j : ℝ))) *
+        (Real.exp 1 * Real.exp (j : ℝ)) :=
+        mul_le_mul_of_nonneg_left hvol (by positivity)
+    _ = Real.exp 1 * ((|ψ (Real.exp ((j : ℝ) + 1))| + |ψ 1|) *
+        (Real.exp (-(2 * (j : ℝ))) * Real.exp (j : ℝ))) := by ring
+    _ = Real.exp 1 * ((|ψ (Real.exp ((j : ℝ) + 1))| + |ψ 1|) * Real.exp (-(j : ℝ))) := by
+        rw [← Real.exp_add]
+        congr 3
+        ring
+
+/-- **Carleman's divergence, one-dimensional core** (pure real analysis): `∑ e^{-L_k} = ∞`. -/
 theorem not_summable_exp_neg_carlemanL (ψ : ℝ → ℝ) (hψ_mono : MonotoneOn ψ (Set.Ici 1))
     (hψ_log : Tendsto (fun s => ψ s / Real.log s) atTop atTop)
     (hψ_convex : ∃ σ₀ : ℝ, ConvexOn ℝ (Set.Ici σ₀) (fun σ => ψ (Real.exp σ)))
     (hψ_div : ¬ IntegrableOn (fun s => ψ s / s ^ 2) (Set.Ici 1)) :
     ¬ Summable (fun k => 1 / Real.exp (carlemanL ψ k)) := by
-  sorry
+  obtain ⟨σ₀, hconv⟩ := hψ_convex
+  intro hsum
+  apply hψ_div
+  refine integrableOn_of_summable_exp ψ hψ_mono ?_
+  set J : ℕ := ⌈σ₀⌉₊ with hJ
+  have hJσ : σ₀ ≤ (J : ℝ) := Nat.le_ceil σ₀
+  have hmono : ∀ j : ℕ, ψ (Real.exp (j : ℝ)) ≤ ψ (Real.exp ((j + 1 : ℕ) : ℝ)) := by
+    intro j
+    have h1 : (1 : ℝ) ≤ Real.exp (j : ℝ) := Real.one_le_exp (Nat.cast_nonneg j)
+    exact hψ_mono (Set.mem_Ici.2 h1) (Set.mem_Ici.2 (h1.trans (Real.exp_le_exp.2 (by simp))))
+      (Real.exp_le_exp.2 (by simp))
+  have hconv' : ∀ j : ℕ, J ≤ j →
+      ψ (Real.exp ((j + 1 : ℕ) : ℝ)) - ψ (Real.exp (j : ℝ)) ≤
+        ψ (Real.exp ((j + 2 : ℕ) : ℝ)) - ψ (Real.exp ((j + 1 : ℕ) : ℝ)) := by
+    intro j hj
+    have hjσ : σ₀ ≤ (j : ℝ) := hJσ.trans (by exact_mod_cast hj)
+    have hsl := hconv.slope_mono_adjacent (x := (j : ℝ)) (y := (j : ℝ) + 1) (z := (j : ℝ) + 2)
+      (Set.mem_Ici.2 hjσ) (Set.mem_Ici.2 (by linarith)) (by linarith) (by linarith)
+    have e1 : ((j : ℝ) + 1) - j = 1 := by ring
+    have e2 : ((j : ℝ) + 2) - ((j : ℝ) + 1) = 1 := by ring
+    rw [e1, e2, div_one, div_one] at hsl
+    push_cast
+    convert hsl using 3 <;> ring_nf
+  have hΛ : ∀ j : ℕ, J ≤ j → ∀ k : ℕ, 1 ≤ k →
+      2 * (k : ℝ) ≤ ψ (Real.exp ((j + 1 : ℕ) : ℝ)) - ψ (Real.exp (j : ℝ)) →
+      carlemanL ψ k ≤ j + (1 + |ψ 1|) := by
+    intro j hj k hk hsl
+    have hjσ : σ₀ ≤ (j : ℝ) := hJσ.trans (by exact_mod_cast hj)
+    have := carlemanL_le_of_slope ψ hψ_mono hψ_log σ₀ hconv j hjσ k hk (by
+      push_cast at hsl
+      exact hsl)
+    linarith
+  have hsum' : Summable (fun k => Real.exp (-carlemanL ψ k)) :=
+    hsum.congr fun k => by rw [one_div, Real.exp_neg]
+  exact summable_of_block_bound (fun j => ψ (Real.exp (j : ℝ))) J hmono hconv'
+    (carlemanL ψ) (1 + |ψ 1|) hΛ hsum'
 
 /-- **Carleman's divergence, one-dimensional core**: radii `R_k = e^{L_k}` with
 `r^k e^{-ψ̄(r)/2} ≤ R_kᵏ` for all `r ≥ 0` and `∑ 1/R_k = ∞`. -/
@@ -1392,7 +1799,7 @@ theorem flat_DC (hn : 0 < n) (lam : ℝ) (hlam : 1 ≤ lam) (U : Space n → ℝ
     have h2 := abs_nonneg (U (lift 0 t))
     have h3 := Real.exp_pos (-ψ ‖lift (0 : EuclideanSpace ℝ (Fin n)) t‖)
     by_contra hneg
-    push_neg at hneg
+    push Not at hneg
     nlinarith
   -- decay of the slice
   have hbound : ∀ y' : EuclideanSpace ℝ (Fin n),

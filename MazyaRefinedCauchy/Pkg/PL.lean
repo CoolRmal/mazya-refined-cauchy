@@ -18,6 +18,10 @@ Helper lemmas may be added; the statements of the contract theorems must not cha
 
 All helpers live in the namespace `MazyaRefinedCauchy.PL`.
 
+Status: the contract theorem is proved from the helpers; the only two helpers still open are
+`tA_deriv_bounds` (derivative bounds of the transformed matrix, part of Lemma inversion) and
+`carleman_P0` (the half-space Carleman estimate for `div(A∇·)`, Proposition carleman).
+
 1. *Inversion.* `invMap y = y / ‖y‖²` is an involution; it maps the tangent ball
    `B(r e_d, r)` onto the half-space `H n (1/(2r)) = {y_d > 1/(2r)}` and back
    (`invMap_mem_ball`, `invMap_mem_H`), and `B(r e_d, r) ⊆ halfBall n (2r)`.
@@ -258,13 +262,145 @@ theorem gradient_comp_invMap (v : Space n → ℝ) {y : Space n} (hy : y ≠ 0)
   rw [inner_gradient_left, hc.fderiv, ContinuousLinearMap.comp_apply,
     smul_apply, map_smul, ← inner_gradient_left, real_inner_smul_left, refl_symm, smul_eq_mul]
 
+theorem refl_refl {y : Space n} (hy : y ≠ 0) (ξ : Space n) : refl y (refl y ξ) = ξ := by
+  have h2 : ‖y‖ ^ 2 ≠ 0 := by positivity
+  have hyy : ⟪y, y⟫_ℝ = ‖y‖ ^ 2 := real_inner_self_eq_norm_sq y
+  rw [refl_apply, refl_apply, inner_sub_right, real_inner_smul_right, hyy]
+  have : 2 * (‖y‖ ^ 2)⁻¹ * (⟪y, ξ⟫_ℝ - 2 * (‖y‖ ^ 2)⁻¹ * ⟪y, ξ⟫_ℝ * ‖y‖ ^ 2)
+      = -(2 * (‖y‖ ^ 2)⁻¹ * ⟪y, ξ⟫_ℝ) := by
+    field_simp
+    ring
+  rw [this, neg_smul, sub_neg_eq_add, sub_add_cancel]
+
+theorem refl_self {y : Space n} (hy : y ≠ 0) : refl y y = -y := by
+  have h2 : ‖y‖ ^ 2 ≠ 0 := by positivity
+  rw [refl_apply, real_inner_self_eq_norm_sq]
+  have : 2 * (‖y‖ ^ 2)⁻¹ * ‖y‖ ^ 2 = 2 := by field_simp
+  rw [this, two_smul]
+  abel
+
+theorem hasFDerivAt_normSqInv {y : Space n} (hy : y ≠ 0) :
+    HasFDerivAt (fun z : Space n => (‖z‖ ^ 2)⁻¹)
+      ((-(2 * ((‖y‖ ^ 2)⁻¹) ^ 2)) • innerSL ℝ y) y := by
+  have h2 : ‖y‖ ^ 2 ≠ 0 := by positivity
+  have h1 : HasFDerivAt (fun x : Space n => ‖x‖ ^ 2) (2 • innerSL ℝ y) y :=
+    (hasStrictFDerivAt_norm_sq y).hasFDerivAt
+  have hinv := (hasDerivAt_inv h2).comp_hasFDerivAt y h1
+  refine hinv.congr_fderiv ?_
+  refine ContinuousLinearMap.ext fun ξ => ?_
+  simp only [smul_apply, innerSL_apply_apply, nsmul_eq_mul, smul_eq_mul, Nat.cast_ofNat]
+  ring
+
+theorem traceCLM_smulRight (f : Space n →L[ℝ] ℝ) (w : Space n) :
+    F2.traceCLM (f.smulRight w) = f w := by
+  rw [F2.traceCLM_apply]
+  have := LinearMap.trace_smulRight (R := ℝ) (M := Space n) (f : Space n →ₗ[ℝ] ℝ) w
+  convert this using 2
+  ext v
+  simp
+
+theorem traceCLM_comp_refl (L : Space n →L[ℝ] Space n) (y : Space n) :
+    F2.traceCLM (L ∘L ((‖y‖ ^ 2)⁻¹ • refl y))
+      = (‖y‖ ^ 2)⁻¹ * (F2.traceCLM L - 2 * (‖y‖ ^ 2)⁻¹ * ⟪y, L y⟫_ℝ) := by
+  have hdec : L ∘L ((‖y‖ ^ 2)⁻¹ • refl y)
+      = (‖y‖ ^ 2)⁻¹ • (L - (2 * (‖y‖ ^ 2)⁻¹) • (innerSL ℝ y).smulRight (L y)) := by
+    refine ContinuousLinearMap.ext fun ξ => ?_
+    simp only [ContinuousLinearMap.comp_apply, smul_apply, sub_apply,
+      ContinuousLinearMap.smulRight_apply, innerSL_apply_apply, refl_apply, map_sub, map_smul]
+    module
+  rw [hdec, map_smul, map_sub, map_smul, traceCLM_smulRight, innerSL_apply_apply, smul_eq_mul,
+    smul_eq_mul]
+
+theorem divergence_id' (y : Space n) : divergence (fun z : Space n => z) y = n + 1 := by
+  rw [F2.divergence_eq_traceCLM, fderiv_fun_id, F2.traceCLM_apply, ContinuousLinearMap.coe_id,
+    LinearMap.trace_id, finrank_euclideanSpace_fin]
+  push_cast
+  ring
+
 /-- **Lemma inversion (pointwise form).** The operator transforms under `Φ` as
 `L̃(v ∘ Φ)(y) = ‖y‖⁻⁴ (L v)(Φ y)`. -/
 theorem ellOp_comp_invMap (A : Space n → Space n →L[ℝ] Space n) (B : Space n → Space n)
     (C : Space n → ℝ) (hA : ContDiff ℝ 1 A) (hsymm : ∀ x ξ η, ⟪A x ξ, η⟫_ℝ = ⟪ξ, A x η⟫_ℝ)
     (v : Space n → ℝ) {y : Space n} (hy : y ≠ 0) (hv : ContDiffAt ℝ 2 v (invMap y)) :
     ellOp (tA A) (tB A B) (tC C) (v ∘ invMap) y = (‖y‖ ^ 4)⁻¹ * ellOp A B C v (invMap y) := by
-  sorry
+  have h2 : ‖y‖ ^ 2 ≠ 0 := by positivity
+  have hyy : ⟪y, y⟫_ℝ = ‖y‖ ^ 2 := real_inner_self_eq_norm_sq y
+  set x₀ := invMap y with hx₀
+  -- regularity at `x₀`
+  have hgv : DifferentiableAt ℝ (gradient v) x₀ := F2.differentiableAt_gradient hv
+  have hAd : DifferentiableAt ℝ A x₀ := (hA.differentiable one_ne_zero) x₀
+  set F : Space n → Space n := fun x => A x (gradient v x) with hF
+  have hFd : DifferentiableAt ℝ F x₀ := hAd.clm_apply hgv
+  set H : Space n → Space n := fun z => F (invMap z) with hH
+  have hHd : HasFDerivAt H ((fderiv ℝ F x₀).comp ((‖y‖ ^ 2)⁻¹ • refl y)) y := by
+    have := HasFDerivAt.comp y (g := F) hFd.hasFDerivAt (hasFDerivAt_invMap hy)
+    exact this
+  -- the transformed field near `y`
+  have hev : ∀ᶠ z in 𝓝 y, z ≠ 0 ∧ DifferentiableAt ℝ v (invMap z) := by
+    have h1 : ∀ᶠ x in 𝓝 x₀, ContDiffAt ℝ 2 v x := hv.eventually (by simp)
+    have h3 : ∀ᶠ z in 𝓝 y, ContDiffAt ℝ 2 v (invMap z) :=
+      (contDiffAt_invMap hy (k := 0)).continuousAt.tendsto.eventually h1
+    filter_upwards [eventually_ne_nhds hy, h3] with z hz hz3
+    exact ⟨hz, hz3.differentiableAt (by simp)⟩
+  set c : Space n → ℝ := fun z => 2 * ((‖z‖ ^ 2)⁻¹) ^ 2 * ⟪z, H z⟫_ℝ with hc
+  have hfield : (fun z => tA A z (gradient (v ∘ invMap) z)) =ᶠ[𝓝 y]
+      fun z => (‖z‖ ^ 2)⁻¹ • H z - c z • z := by
+    filter_upwards [hev] with z ⟨hz, hvz⟩
+    rw [gradient_comp_invMap v hz hvz]
+    simp only [tA, ContinuousLinearMap.comp_apply, map_smul, refl_refl hz]
+    rw [refl_apply]
+    simp only [hH, hF, hc, smul_sub, smul_smul]
+    congr 2
+    ring
+  -- derivatives of the pieces
+  have hN := hasFDerivAt_normSqInv hy
+  have hHd' : DifferentiableAt ℝ H y := hHd.differentiableAt
+  have hcd : HasFDerivAt c _ y :=
+    ((hN.pow 2).const_mul 2).mul ((hasFDerivAt_id y).inner ℝ hHd)
+  have hdiv : divergence (fun z => tA A z (gradient (v ∘ invMap) z)) y
+      = ((‖y‖ ^ 2)⁻¹ * divergence H y + fderiv ℝ (fun z : Space n => (‖z‖ ^ 2)⁻¹) y (H y))
+        - (c y * divergence (fun z : Space n => z) y + fderiv ℝ c y y) := by
+    rw [F2.divergence_congr hfield]
+    have hd1 : DifferentiableAt ℝ (fun z => (‖z‖ ^ 2)⁻¹ • H z) y := hN.differentiableAt.smul hHd'
+    have hd2 : DifferentiableAt ℝ (fun z => c z • z) y := hcd.differentiableAt.smul differentiableAt_id
+    rw [F2.divergence_sub hd1 hd2, F2.divergence_smul hN.differentiableAt hHd',
+      F2.divergence_smul hcd.differentiableAt differentiableAt_fun_id]
+  have hdivH : divergence H y = (‖y‖ ^ 2)⁻¹
+      * (F2.traceCLM (fderiv ℝ F x₀) - 2 * (‖y‖ ^ 2)⁻¹ * ⟪y, fderiv ℝ F x₀ y⟫_ℝ) := by
+    rw [F2.divergence_eq_traceCLM, hHd.fderiv, traceCLM_comp_refl]
+  have hDN : fderiv ℝ (fun z : Space n => (‖z‖ ^ 2)⁻¹) y (H y)
+      = -(2 * ((‖y‖ ^ 2)⁻¹) ^ 2) * ⟪y, H y⟫_ℝ := by
+    rw [hN.fderiv]
+    simp
+  have hDH : fderiv ℝ H y y = -((‖y‖ ^ 2)⁻¹ • fderiv ℝ F x₀ y) := by
+    rw [hHd.fderiv, ContinuousLinearMap.comp_apply, smul_apply, refl_self hy, smul_neg, map_neg,
+      map_smul]
+  have hDc : fderiv ℝ c y y = 2 * (2 * (‖y‖ ^ 2)⁻¹ * (-(2 * ((‖y‖ ^ 2)⁻¹) ^ 2) * ⟪y, y⟫_ℝ))
+        * ⟪y, H y⟫_ℝ + 2 * ((‖y‖ ^ 2)⁻¹) ^ 2 * (⟪y, H y⟫_ℝ
+          - (‖y‖ ^ 2)⁻¹ * ⟪y, fderiv ℝ F x₀ y⟫_ℝ) := by
+    rw [hcd.fderiv]
+    simp only [add_apply, smul_apply, smul_eq_mul, ContinuousLinearMap.comp_apply,
+      ContinuousLinearMap.prod_apply, fderivInnerCLM_apply, ContinuousLinearMap.id_apply,
+      innerSL_apply_apply, id, nsmul_eq_mul, Nat.cast_ofNat, refl_self hy, map_neg, map_smul,
+      inner_neg_right, real_inner_smul_right]
+    norm_num
+    ring
+  have hgy : gradient (v ∘ invMap) y = (‖y‖ ^ 2)⁻¹ • refl y (gradient v x₀) :=
+    gradient_comp_invMap v hy (hv.differentiableAt (by simp))
+  have hq : ⟪tA A y y, refl y (gradient v x₀)⟫_ℝ = -⟪y, H y⟫_ℝ := by
+    simp only [tA, ContinuousLinearMap.comp_apply]
+    rw [inner_refl_refl hy, refl_self hy, map_neg, inner_neg_left, hsymm]
+  have hb : ⟪refl y (B x₀), refl y (gradient v x₀)⟫_ℝ = ⟪B x₀, gradient v x₀⟫_ℝ :=
+    inner_refl_refl hy _ _
+  have hHy : H y = F x₀ := rfl
+  have hcy : c y = 2 * ((‖y‖ ^ 2)⁻¹) ^ 2 * ⟪y, H y⟫_ℝ := rfl
+  simp only [ellOp]
+  rw [hdiv, hdivH, hDN, hDc, divergence_id', hgy, hcy]
+  simp only [tB, tC, Function.comp_apply, inner_add_left, real_inner_smul_left,
+    real_inner_smul_right, hq, ← hx₀, hb]
+  rw [hyy, F2.divergence_eq_traceCLM (fun z => A z (gradient v z)), ← hF, hHy]
+  field_simp
+  ring
 
 /-! ### Coefficient bounds for the half-space Carleman estimate -/
 
@@ -295,6 +431,37 @@ theorem CarlCoeffs.mono {A : Space n → Space n →L[ℝ] Space n} {β : Space 
   bound_β y hy := h.bound_β y (H_mono hl hy)
   bound_γ y hy := h.bound_γ y (H_mono hl hy)
 
+theorem norm_refl_le {y : Space n} (hy : y ≠ 0) : ‖refl y‖ ≤ 1 :=
+  ContinuousLinearMap.opNorm_le_bound _ zero_le_one fun ξ => by
+    rw [norm_refl_apply hy, one_mul]
+
+theorem tA_sub_id {y : Space n} (hy : y ≠ 0) (A : Space n → Space n →L[ℝ] Space n) :
+    tA A y - ContinuousLinearMap.id ℝ (Space n)
+      = refl y ∘L (A (invMap y) - ContinuousLinearMap.id ℝ (Space n)) ∘L refl y := by
+  refine ContinuousLinearMap.ext fun ξ => ?_
+  simp [tA, refl_refl hy]
+
+theorem norm_tA_le {y : Space n} (hy : y ≠ 0) (A : Space n → Space n →L[ℝ] Space n) :
+    ‖tA A y‖ ≤ ‖A (invMap y)‖ := by
+  unfold tA
+  calc ‖refl y ∘L A (invMap y) ∘L refl y‖ ≤ ‖refl y‖ * (‖A (invMap y)‖ * ‖refl y‖) :=
+        (ContinuousLinearMap.opNorm_comp_le _ _).trans
+          (mul_le_mul_of_nonneg_left (ContinuousLinearMap.opNorm_comp_le _ _) (norm_nonneg _))
+    _ ≤ 1 * (‖A (invMap y)‖ * 1) := by
+        gcongr
+        · exact norm_refl_le hy
+        · exact norm_refl_le hy
+    _ = _ := by ring
+
+/-- The derivative bounds `|∇Ã| ≤ K/|y|²`, `|∇²Ã| ≤ K/|y|³` of Lemma inversion. Write
+`Ã - I = ℛ E ℛ` with `E = A ∘ Φ - I` (`tA_sub_id`; this uses `ℛ ∘ ℛ = I`) and apply Leibniz:
+every term is small because `|ℛ| ≤ 1`, `|E| ≤ K/|y|` (see `coeff_bounds`),
+`|DE| ≤ K |DΦ| ≤ K/|y|²`, `|D²E| ≤ K(|DΦ|² + |D²Φ|) ≤ CK/|y|³`, `|Dℛ| ≤ C/|y|`,
+`|D²ℛ| ≤ C/|y|²` (`ℛ` is homogeneous of degree `0`, `Φ` of degree `-1`). -/
+theorem tA_deriv_bounds (S : HalfBallSolution n) : ∃ K₁ : ℝ, 0 ≤ K₁ ∧ ∀ y : Space n, 1 ≤ ‖y‖ →
+    ‖fderiv ℝ (tA S.A) y‖ ≤ K₁ / ‖y‖ ^ 2 ∧ ‖iteratedFDeriv ℝ 2 (tA S.A) y‖ ≤ K₁ / ‖y‖ ^ 3 := by
+  sorry
+
 /-- Regularity and size bounds of the transformed coefficients on `{‖y‖ ≥ 1}` (Lemma inversion). -/
 theorem coeff_bounds (S : HalfBallSolution n) : ∃ K' : ℝ, 0 ≤ K' ∧ ∀ y : Space n, 1 ≤ ‖y‖ →
     ‖tA S.A y - ContinuousLinearMap.id ℝ (Space n)‖ ≤ K' / ‖y‖ ∧
@@ -302,7 +469,80 @@ theorem coeff_bounds (S : HalfBallSolution n) : ∃ K' : ℝ, 0 ≤ K' ∧ ∀ y
     ‖iteratedFDeriv ℝ 2 (tA S.A) y‖ ≤ K' / ‖y‖ ^ 3 ∧
     ‖tB S.A S.B y‖ ≤ K' / ‖y‖ ∧
     |tC S.C y| ≤ K' / ‖y‖ ^ 2 := by
-  sorry
+  obtain ⟨K₁, hK₁, hd⟩ := tA_deriv_bounds S
+  set K := S.K with hKdef
+  have hK0 : 0 ≤ K := (norm_nonneg _).trans (S.coeffs.bound_A 0)
+  set c : ℝ := |4 - 2 * ((n : ℝ) + 1)| with hc
+  have hc0 : 0 ≤ c := abs_nonneg _
+  refine ⟨(c + 1) * K + K + K₁, by positivity, fun y hy => ?_⟩
+  have hy0 : y ≠ 0 := by
+    intro h; rw [h, norm_zero] at hy; linarith
+  have hyp : 0 < ‖y‖ := norm_pos_iff.mpr hy0
+  have hAd : ∀ x, DifferentiableAt ℝ S.A x := fun x =>
+    (S.coeffs.contDiff_A.differentiable (by norm_num)) x
+  -- `|A(Φ y) - I| ≤ K / |y|`
+  have hAI : ‖S.A (invMap y) - ContinuousLinearMap.id ℝ (Space n)‖ ≤ K / ‖y‖ := by
+    have h := Convex.norm_image_sub_le_of_norm_fderiv_le (fun x _ => hAd x)
+      (fun x _ => S.coeffs.bound_dA x) convex_univ (Set.mem_univ (0 : Space n))
+      (Set.mem_univ (invMap y))
+    rw [S.A_zero, sub_zero, norm_invMap] at h
+    rwa [div_eq_mul_inv]
+  have hKy : K / ‖y‖ ≤ ((c + 1) * K + K + K₁) / ‖y‖ := by
+    apply div_le_div_of_nonneg_right _ hyp.le
+    nlinarith
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  · rw [tA_sub_id hy0]
+    calc ‖refl y ∘L (S.A (invMap y) - ContinuousLinearMap.id ℝ (Space n)) ∘L refl y‖
+        ≤ ‖refl y‖ * (‖S.A (invMap y) - ContinuousLinearMap.id ℝ (Space n)‖ * ‖refl y‖) :=
+          (ContinuousLinearMap.opNorm_comp_le _ _).trans
+            (mul_le_mul_of_nonneg_left (ContinuousLinearMap.opNorm_comp_le _ _) (norm_nonneg _))
+      _ ≤ 1 * (K / ‖y‖ * 1) := by
+          gcongr
+          · exact norm_refl_le hy0
+          · exact norm_refl_le hy0
+      _ = K / ‖y‖ := by ring
+      _ ≤ _ := hKy
+  · refine (hd y hy).1.trans ?_
+    apply div_le_div_of_nonneg_right _ (by positivity)
+    nlinarith
+  · refine (hd y hy).2.trans ?_
+    apply div_le_div_of_nonneg_right _ (by positivity)
+    nlinarith
+  · have h1 : ‖tA S.A y y‖ ≤ K * ‖y‖ :=
+      ((tA S.A y).le_opNorm y).trans
+        (mul_le_mul_of_nonneg_right ((norm_tA_le hy0 S.A).trans (S.coeffs.bound_A _))
+          (norm_nonneg _))
+    have h2 : ‖refl y (S.B (invMap y))‖ ≤ K := by
+      rw [norm_refl_apply hy0]; exact S.coeffs.bound_B _
+    have hy2 : (‖y‖ ^ 2)⁻¹ ≤ ‖y‖⁻¹ := by
+      rw [inv_le_inv₀ (by positivity) hyp]; nlinarith
+    unfold tB
+    calc ‖((4 - 2 * ((n : ℝ) + 1)) * (‖y‖ ^ 2)⁻¹) • tA S.A y y
+          + (‖y‖ ^ 2)⁻¹ • refl y (S.B (invMap y))‖
+        ≤ ‖((4 - 2 * ((n : ℝ) + 1)) * (‖y‖ ^ 2)⁻¹) • tA S.A y y‖
+          + ‖(‖y‖ ^ 2)⁻¹ • refl y (S.B (invMap y))‖ := norm_add_le _ _
+      _ = c * (‖y‖ ^ 2)⁻¹ * ‖tA S.A y y‖ + (‖y‖ ^ 2)⁻¹ * ‖refl y (S.B (invMap y))‖ := by
+          rw [norm_smul, norm_smul, Real.norm_eq_abs, Real.norm_eq_abs, abs_mul,
+            abs_of_pos (by positivity : (0 : ℝ) < (‖y‖ ^ 2)⁻¹)]
+      _ ≤ c * (‖y‖ ^ 2)⁻¹ * (K * ‖y‖) + ‖y‖⁻¹ * K := by
+          gcongr
+      _ = (c * K + K) / ‖y‖ := by field_simp
+      _ ≤ _ := by
+          apply div_le_div_of_nonneg_right _ hyp.le
+          nlinarith
+  · unfold tC
+    rw [abs_mul, abs_of_pos (by positivity : (0 : ℝ) < (‖y‖ ^ 4)⁻¹)]
+    have h1 : |S.C (invMap y)| ≤ K := S.coeffs.bound_C _
+    have hy4 : (‖y‖ ^ 4)⁻¹ ≤ (‖y‖ ^ 2)⁻¹ := by
+      rw [inv_le_inv₀ (by positivity) (by positivity)]
+      have h2 : 1 ≤ ‖y‖ ^ 2 := one_le_pow₀ hy
+      nlinarith [mul_nonneg (sq_nonneg ‖y‖) (sub_nonneg.mpr h2)]
+    calc (‖y‖ ^ 4)⁻¹ * |S.C (invMap y)| ≤ (‖y‖ ^ 2)⁻¹ * K :=
+          mul_le_mul hy4 h1 (abs_nonneg _) (by positivity)
+      _ = K / ‖y‖ ^ 2 := by rw [div_eq_inv_mul]
+      _ ≤ _ := by
+          apply div_le_div_of_nonneg_right _ (by positivity)
+          nlinarith
 
 theorem contDiffAt_refl {y : Space n} (hy : y ≠ 0) {k : WithTop ℕ∞} :
     ContDiffAt ℝ k (refl (n := n)) y := by
@@ -485,6 +725,25 @@ theorem carleman_P0 (K : ℝ) (hK : 0 ≤ K) :
               * ‖gradient v y‖ ^ 2)
           ≤ 15 * ∫ y, Real.exp (2 * τ * gw C₀ (vcoord y))
               * divergence (fun z => A z (gradient v z)) y ^ 2 := by
+  -- Proof plan (Proposition carleman of the note, with `μ = 1`, `B = A`,
+  -- `φ y = gw C₀ (vcoord y)`, `s = vcoord y`, `g = gw C₀`):
+  -- * Constants: with `T := ‖F2.traceCLM‖`, put `C♯ := 15/2 K + 5/4 T + 1`,
+  --   `C₀ := 3 K + 3 C♯ + 2`, `l₁ := max (max (4 C₀) (4 K)) (max (C₀ + K) 1)`; then on `H n l`:
+  --   `3/4 ≤ g' ≤ 1`, `g'' = C₀/s²`, `|g'''| = 2C₀/s³`, `‖A - I‖ ≤ 1/4`, `‖DA‖ ≤ K/s²`,
+  --   `‖D²A‖ ≤ K/s³` (from `CarlCoeffs`).
+  -- * `w := e^{τφ} v`.  Pointwise on `H n l`: `e^{τφ} div(A∇v) = carlS w + carlT w`
+  --   (`F2.carleman_conj_of_symm'` with `μ = 1`, `F2.divMu_one`) and
+  --   `2 carlS carlT = carlJ + div carlFlux` (`F2.carleman_pointwise`); off `tsupport v` all
+  --   terms vanish (as in `ellOp_eq_zero_of_not_mem_tsupport`).  `carlFlux` is `C¹` with compact
+  --   support, so `∫ div carlFlux = 0` (`integral_divergence_eq_zero`); integrability of the
+  --   other terms as in `integrable_of_tsupport`.  Hence `∫ e^{2τφ}(P₀v)² ≥ ‖Sw‖² + ∫ carlJ`.
+  -- * Lower bound for `carlJ` on `H n l` (`V = g'(s) A e_d`, `q = g'(s)² A_dd`; bound
+  --   `‖D² V‖` by Leibniz and `|div(fderiv V)| ≤ T ‖D² V‖`):
+  --   `carlJ ≥ (C₀ - 3K) τ³ s⁻² w² - 5/4 T τ s⁻² w² - C♯ τ s⁻² ‖∇w‖²`.
+  -- * Gradient control: `F2.carleman_gradient_pointwise` with `ϱ = s⁻²`, integrated, gives for
+  --   `τ ≥ 5` and `ε > 0`: `∫ s⁻² ‖∇w‖² ≤ ε⁻¹ ‖Sw‖² + (ε + 3τ²) ∫ s⁻² w²`.
+  -- * Take `ε = 2C♯τ` to get `‖e^{τφ}P₀v‖² ≥ ‖Sw‖²/2 + τ³ ∫ s⁻² w²` for `τ ≥ τ₁`, then `ε = τ`,
+  --   and use `e^{τφ}∇v = ∇w - τ g'(s) w e_d`; the total constant is `1 + 14 = 15`.
   sorry
 
 /-- **Proposition carleman.** -/
@@ -1467,6 +1726,54 @@ theorem PL_core (K : ℝ) (hK : 0 ≤ K) : ∃ l₂ : ℝ, 1 ≤ l₂ ∧ ∀ l 
     rwa [div_lt_iff₀ hm0] at this
   nlinarith [mul_le_mul_of_nonneg_right hτ3 hm0.le]
 
+theorem abs_det_refl {x : Space n} (hx : x ≠ 0) :
+    |LinearMap.det (refl x : Space n →ₗ[ℝ] Space n)| = 1 := by
+  have h : (refl x : Space n →ₗ[ℝ] Space n) ∘ₗ (refl x : Space n →ₗ[ℝ] Space n)
+      = LinearMap.id := by
+    refine LinearMap.ext fun ξ => ?_
+    simp [refl_refl hx]
+  have hd : LinearMap.det (refl x : Space n →ₗ[ℝ] Space n)
+      * LinearMap.det (refl x : Space n →ₗ[ℝ] Space n) = 1 := by
+    rw [← LinearMap.det_comp, h, LinearMap.det_id]
+  have h0 := abs_nonneg (LinearMap.det (refl x : Space n →ₗ[ℝ] Space n))
+  have h2 : |LinearMap.det (refl x : Space n →ₗ[ℝ] Space n)|
+      * |LinearMap.det (refl x : Space n →ₗ[ℝ] Space n)| = 1 := by
+    rw [← abs_mul, hd, abs_one]
+  nlinarith [sq_nonneg (|LinearMap.det (refl x : Space n →ₗ[ℝ] Space n)| - 1)]
+
+theorem abs_det_fderiv_invMap {x : Space n} (hx : x ≠ 0) :
+    abs (((‖x‖ ^ 2)⁻¹ • refl x).det) = ((‖x‖ ^ 2)⁻¹) ^ (n + 1) := by
+  rw [ContinuousLinearMap.det, ContinuousLinearMap.coe_smul, LinearMap.det_smul, abs_mul,
+    abs_det_refl hx, mul_one, finrank_euclideanSpace_fin, abs_pow,
+    abs_of_pos (by positivity : (0 : ℝ) < (‖x‖ ^ 2)⁻¹)]
+
+theorem measurable_invMap : Measurable (invMap : Space n → Space n) :=
+  ((continuous_norm.measurable.pow_const 2).inv).smul measurable_id
+
+theorem invMap_surjective : Function.Surjective (invMap : Space n → Space n) :=
+  fun y => ⟨invMap y, invMap_invMap y⟩
+
+theorem invMap_injective : Function.Injective (invMap : Space n → Space n) :=
+  Function.LeftInverse.injective invMap_invMap
+
+theorem invMap_zero : invMap (0 : Space n) = 0 := by simp [invMap]
+
+/-- Integrability of `v² + |Dv|²` on `halfBall n r` for `r < R`. -/
+theorem integrableOn_halfBall_energy (S : HalfBallSolution n) {r : ℝ} (hr : r < S.R) :
+    IntegrableOn (fun x => S.v x ^ 2 + ‖S.Dv x‖ ^ 2) (halfBall n r) := by
+  set K : Set (Space n) := {x | ‖x‖ ≤ r ∧ 0 ≤ vcoord x} with hK
+  have hKc : IsCompact K := by
+    apply Metric.isCompact_of_isClosed_isBounded
+    · exact (isClosed_le continuous_norm continuous_const).inter
+        (isClosed_le continuous_const F1.continuous_vcoord)
+    · refine (Metric.isBounded_closedBall (x := (0 : Space n)) (r := r)).subset fun x hx => ?_
+      rw [Metric.mem_closedBall, dist_zero_right]
+      exact hx.1
+  have hKs : K ⊆ closedHalfBall n S.R := fun x hx => ⟨lt_of_le_of_lt hx.1 hr, hx.2⟩
+  have hcont : ContinuousOn (fun x => S.v x ^ 2 + ‖S.Dv x‖ ^ 2) K :=
+    ((S.v_continuousOn.mono hKs).pow 2).add ((S.Dv_continuousOn.mono hKs).norm.pow 2)
+  exact (hcont.integrableOn_compact hKc).mono_set fun x hx => ⟨hx.1.le, hx.2.le⟩
+
 /-- **Decay on shells** for `U = v ∘ Φ`: the change of variables `x = Φ(y)` in the decay
 hypothesis. -/
 theorem shell_decay (S : HalfBallSolution n)
@@ -1476,14 +1783,150 @@ theorem shell_decay (S : HalfBallSolution n)
     ∀ N : ℝ, ∃ CN M₀ : ℝ, ∀ M : ℝ, M₀ ≤ M →
       ∫ y in shell n l M, ((S.v ∘ invMap) y ^ 2 + ‖gradient (S.v ∘ invMap) y‖ ^ 2)
         ≤ CN * Real.exp (-N * M) := by
-  sorry
+  intro N
+  have hl0 : 0 < l := by linarith
+  have hR := S.R_pos
+  obtain ⟨C', hC'⟩ := hdecay (2 * N + 4)
+  set k : ℕ := 2 * (n + 1) with hk
+  refine ⟨max C' 0 * (k.factorial : ℝ), max 1 (2 / S.R + 1), fun M hM => ?_⟩
+  have hM1 : 1 ≤ M := le_trans (le_max_left _ _) hM
+  have hMR : 2 / S.R + 1 ≤ M := le_trans (le_max_right _ _) hM
+  have hM0 : 0 < M := by linarith
+  have h2M : 2 / M < S.R := by
+    rw [div_lt_iff₀ hM0]
+    have : 2 / S.R < M := by linarith
+    rw [div_lt_iff₀ hR] at this
+    linarith
+  set G : Space n → ℝ := fun y => (S.v ∘ invMap) y ^ 2 + ‖gradient (S.v ∘ invMap) y‖ ^ 2 with hG
+  set T : Set (Space n) := invMap ⁻¹' shell n l M with hT
+  have hTm : MeasurableSet T := (isClosed_shell l M).measurableSet.preimage measurable_invMap
+  have hTimg : invMap '' T = shell n l M := Set.image_preimage_eq _ invMap_surjective
+  have hT0 : ∀ x ∈ T, x ≠ 0 := by
+    intro x hx h
+    have : invMap x ∈ shell n l M := hx
+    rw [h, invMap_zero] at this
+    have h1 := this.1
+    simp [vcoord] at h1
+    linarith
+  -- change of variables
+  have hcov : ∫ y in shell n l M, G y
+      = ∫ x in T, abs (((‖x‖ ^ 2)⁻¹ • refl x).det) • G (invMap x) := by
+    rw [← hTimg]
+    exact integral_image_eq_integral_abs_det_fderiv_smul volume hTm
+      (fun x hx => (hasFDerivAt_invMap (hT0 x hx)).hasFDerivWithinAt)
+      invMap_injective.injOn G
+  -- points of `T`
+  have hr : (0 : ℝ) < 1 / (2 * l) := by positivity
+  have hTmem : ∀ x ∈ T, x ∈ halfBall n S.R ∧ x ∈ halfBall n (2 / M)
+      ∧ 1 / (2 * M) ≤ ‖x‖ ∧ ‖x‖ ≤ 1 / M := by
+    intro x hx
+    have hsh : invMap x ∈ shell n l M := hx
+    have hHl : invMap x ∈ H n (1 / (2 * (1 / (2 * l)))) := by
+      have : 1 / (2 * (1 / (2 * l))) = l := by field_simp
+      rw [this]
+      show l < vcoord (invMap x)
+      linarith [hsh.1]
+    have hball := invMap_mem_ball hr hHl
+    rw [invMap_invMap] at hball
+    have hhb := ball_subset_halfBall hr hball
+    have h2l : 2 * (1 / (2 * l)) = 1 / l := by field_simp
+    rw [h2l] at hhb
+    have hx0 := hT0 x hx
+    have hN : ‖invMap x‖ = ‖x‖⁻¹ := norm_invMap x
+    have hxp : 0 < ‖x‖ := norm_pos_iff.mpr hx0
+    have hn1 : M ≤ ‖x‖⁻¹ := hN ▸ hsh.2.1
+    have hn2 : ‖x‖⁻¹ ≤ 2 * M := hN ▸ hsh.2.2
+    have hb1 : 1 / (2 * M) ≤ ‖x‖ := by
+      rw [div_le_iff₀ (by positivity)]
+      calc 1 = ‖x‖⁻¹ * ‖x‖ := (inv_mul_cancel₀ hxp.ne').symm
+        _ ≤ (2 * M) * ‖x‖ := mul_le_mul_of_nonneg_right hn2 hxp.le
+        _ = ‖x‖ * (2 * M) := by ring
+    have hb2 : ‖x‖ ≤ 1 / M := by
+      rw [le_div_iff₀ hM0]
+      calc ‖x‖ * M ≤ ‖x‖ * ‖x‖⁻¹ := mul_le_mul_of_nonneg_left hn1 hxp.le
+        _ = 1 := mul_inv_cancel₀ hxp.ne'
+    refine ⟨halfBall_mono hlR.le hhb, ⟨?_, hhb.2⟩, hb1, hb2⟩
+    calc ‖x‖ ≤ 1 / M := hb2
+      _ < 2 / M := by gcongr; norm_num
+  -- pointwise bound on `T`
+  have hpt : ∀ x ∈ T, abs (((‖x‖ ^ 2)⁻¹ • refl x).det) • G (invMap x)
+      ≤ (2 * M) ^ k * (S.v x ^ 2 + ‖S.Dv x‖ ^ 2) := by
+    intro x hx
+    obtain ⟨hxR, -, hb1, hb2⟩ := hTmem x hx
+    have hx0 := hT0 x hx
+    have hxp : 0 < ‖x‖ := norm_pos_iff.mpr hx0
+    have hvx : ContDiffAt ℝ 2 S.v x :=
+      S.v_contDiffOn.contDiffAt ((isOpen_halfBall S.R).mem_nhds hxR)
+    have hgrad : gradient (S.v ∘ invMap) (invMap x)
+        = (‖invMap x‖ ^ 2)⁻¹ • refl (invMap x) (gradient S.v x) := by
+      have := gradient_comp_invMap S.v (invMap_ne_zero hx0)
+        (by rw [invMap_invMap]; exact hvx.differentiableAt (by simp))
+      rw [invMap_invMap] at this
+      exact this
+    have hnorm : ‖gradient (S.v ∘ invMap) (invMap x)‖ = ‖x‖ ^ 2 * ‖S.Dv x‖ := by
+      rw [hgrad, norm_smul, norm_refl_apply (invMap_ne_zero hx0), norm_invMap,
+        S.gradient_eq x hxR, Real.norm_eq_abs, abs_of_pos (by positivity), inv_pow, inv_inv]
+    have hGx : G (invMap x) = S.v x ^ 2 + (‖x‖ ^ 2 * ‖S.Dv x‖) ^ 2 := by
+      simp only [hG, Function.comp_apply, invMap_invMap, hnorm]
+    rw [abs_det_fderiv_invMap hx0, hGx, smul_eq_mul]
+    have hxinv : (‖x‖ ^ 2)⁻¹ ≤ (2 * M) ^ 2 := by
+      rw [inv_le_iff_one_le_mul₀ (by positivity)]
+      have : 1 ≤ (2 * M) * ‖x‖ := by
+        rw [div_le_iff₀ (by positivity)] at hb1
+        linarith
+      nlinarith
+    have hpow : ((‖x‖ ^ 2)⁻¹) ^ (n + 1) ≤ (2 * M) ^ k := by
+      rw [hk, pow_mul]
+      exact pow_le_pow_left₀ (by positivity) hxinv _
+    have hx4 : (‖x‖ ^ 2 * ‖S.Dv x‖) ^ 2 ≤ ‖S.Dv x‖ ^ 2 := by
+      have hx1 : ‖x‖ ≤ 1 := hb2.trans (by rw [div_le_one hM0]; exact hM1)
+      have : ‖x‖ ^ 2 ≤ 1 := by nlinarith
+      have h0 : 0 ≤ ‖x‖ ^ 2 := by positivity
+      calc (‖x‖ ^ 2 * ‖S.Dv x‖) ^ 2 = (‖x‖ ^ 2) ^ 2 * ‖S.Dv x‖ ^ 2 := by ring
+        _ ≤ 1 * ‖S.Dv x‖ ^ 2 := by gcongr; nlinarith
+        _ = _ := one_mul _
+    exact mul_le_mul hpow (by linarith) (by positivity) (by positivity)
+  -- comparison with the half-ball integral
+  have hint := integrableOn_halfBall_energy S h2M
+  have hTsub : T ⊆ halfBall n (2 / M) := fun x hx => (hTmem x hx).2.1
+  have hbound : ∫ x in T, abs (((‖x‖ ^ 2)⁻¹ • refl x).det) • G (invMap x)
+      ≤ (2 * M) ^ k * ∫ x in halfBall n (2 / M), (S.v x ^ 2 + ‖S.Dv x‖ ^ 2) := by
+    rw [← integral_const_mul]
+    calc ∫ x in T, abs (((‖x‖ ^ 2)⁻¹ • refl x).det) • G (invMap x)
+        ≤ ∫ x in T, (2 * M) ^ k * (S.v x ^ 2 + ‖S.Dv x‖ ^ 2) := by
+          apply integral_mono_of_nonneg
+          · exact Eventually.of_forall fun x => by positivity
+          · exact ((hint.mono_set hTsub).const_mul _)
+          · exact (ae_restrict_iff' hTm).mpr (Eventually.of_forall hpt)
+      _ ≤ ∫ x in halfBall n (2 / M), (2 * M) ^ k * (S.v x ^ 2 + ‖S.Dv x‖ ^ 2) :=
+          setIntegral_mono_set (hint.const_mul _)
+            (Eventually.of_forall fun x => by positivity)
+            (Filter.eventuallySubset_iff.2 (Eventually.of_forall fun x hx => hTsub hx))
+  have hdec' : ∫ x in halfBall n (2 / M), (S.v x ^ 2 + ‖S.Dv x‖ ^ 2)
+      ≤ max C' 0 * Real.exp (-(N + 2) * M) := by
+    have h1 := hC' (2 / M) (show 2 / M ∈ Set.Ioo 0 S.R from ⟨by positivity, h2M⟩)
+    have hexp : -(2 * N + 4) / (2 / M) = -(N + 2) * M := by
+      field_simp
+      ring
+    rw [hexp] at h1
+    exact h1.trans (mul_le_mul_of_nonneg_right (le_max_left _ _) (Real.exp_pos _).le)
+  -- absorb the polynomial factor
+  have hfac : (2 * M) ^ k ≤ (k.factorial : ℝ) * Real.exp (2 * M) := by
+    have := Real.pow_div_factorial_le_exp (2 * M) (by positivity) k
+    rw [div_le_iff₀ (by positivity)] at this
+    linarith
+  have hI0 : 0 ≤ ∫ x in halfBall n (2 / M), (S.v x ^ 2 + ‖S.Dv x‖ ^ 2) :=
+    setIntegral_nonneg (isOpen_halfBall _).measurableSet (fun x _ => by positivity)
+  rw [hcov]
+  calc _ ≤ (2 * M) ^ k * ∫ x in halfBall n (2 / M), (S.v x ^ 2 + ‖S.Dv x‖ ^ 2) := hbound
+    _ ≤ ((k.factorial : ℝ) * Real.exp (2 * M)) * (max C' 0 * Real.exp (-(N + 2) * M)) :=
+        mul_le_mul hfac hdec' hI0 (by positivity)
+    _ = max C' 0 * (k.factorial : ℝ) * Real.exp (-N * M) := by
+        rw [show -N * M = 2 * M + -(N + 2) * M by ring, Real.exp_add]
+        ring
 
-end PL
-
-open PL in
-/-- **Proposition PL.** Interior decay faster than every `e^{-N/r}` forces the solution to vanish
-on a ball tangent to the flat boundary at `0`. -/
-theorem HalfBallSolution.vanish_of_superexp (S : HalfBallSolution n)
+/-- The proof of Proposition PL (the contract theorem `HalfBallSolution.vanish_of_superexp`). -/
+theorem vanish_of_superexp_aux (S : HalfBallSolution n)
     (hdecay : ∀ N : ℝ, ∃ Cn : ℝ, ∀ r ∈ Set.Ioo 0 S.R,
       ∫ x in halfBall n r, (S.v x ^ 2 + ‖S.Dv x‖ ^ 2) ≤ Cn * Real.exp (-N / r)) :
     ∃ r' > 0, ∀ x ∈ Metric.ball (r' • ed n) r', S.v x = 0 := by
@@ -1534,5 +1977,15 @@ theorem HalfBallSolution.vanish_of_superexp (S : HalfBallSolution n)
   rw [hH3] at hx'
   have := hzero _ hx'
   simpa [Function.comp_apply, invMap_invMap] using this
+
+end PL
+
+/-- **Proposition PL.** Interior decay faster than every `e^{-N/r}` forces the solution to vanish
+on a ball tangent to the flat boundary at `0`. -/
+theorem HalfBallSolution.vanish_of_superexp (S : HalfBallSolution n)
+    (hdecay : ∀ N : ℝ, ∃ Cn : ℝ, ∀ r ∈ Set.Ioo 0 S.R,
+      ∫ x in halfBall n r, (S.v x ^ 2 + ‖S.Dv x‖ ^ 2) ≤ Cn * Real.exp (-N / r)) :
+    ∃ r' > 0, ∀ x ∈ Metric.ball (r' • ed n) r', S.v x = 0 :=
+  PL.vanish_of_superexp_aux S hdecay
 
 end MazyaRefinedCauchy

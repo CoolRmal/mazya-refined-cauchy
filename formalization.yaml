@@ -29,15 +29,20 @@ classification:
 
 sources:
   - title: "Strong uniqueness in the Cauchy problem at a boundary point (unpublished note, Theorem I)"
-    type: original-proof
+    type: other
     authors:
       - "Yongxi (Aaron) Lin"
-    relationship: other
-    note: "The theorem and its informal proof were first written in this note (2026), with AI assistance."
+    relationship: formalizes
+    note: >-
+      Unpublished note (2026), written by the maintainer with AI assistance, in which Theorem I and
+      its informal proof first appeared; it is not publicly available. The Lean development
+      formalizes Theorem I(a) and I(b) in the smooth setting described under fidelity, following
+      the note's proof with the departures listed in BLUEPRINT.md. The note preceded this
+      formalization; publication priority and novelty are not claimed.
   - title: "Seventy five (thousand) unsolved problems in analysis and partial differential equations"
     authors:
       - "Vladimir Maz'ya"
-    type: article
+    type: paper
     id: "doi:10.1007/s00020-018-2460-8"
     location: "Section 5.3 (p. 15 of https://users.mai.liu.se/vlama82/pdf/Problems2018l_0312.pdf)"
     relationship: background
@@ -46,7 +51,7 @@ sources:
     authors:
       - "V. G. Maz'ya"
       - "V. P. Havin"
-    type: article
+    type: paper
     id: "https://www.mathnet.ru/eng/mmo300"
     location: "the half-space uniqueness criterion (integral of log h = -infinity)"
     relationship: background
@@ -119,7 +124,7 @@ fidelity:
 review:
   status: "agent-reviewed"
   reviewers:
-    - "none yet"
+    - "Independent AI review agents (Claude Code, claude-opus-5-5), for the statements in Challenge.lean"
   notes: "The statements were audited by independent AI reviewers; the maintainer's review is pending. The proofs are checked by Lean's kernel, NanoDa and con-ron through Comparator."
 
 alignment:
